@@ -39,13 +39,29 @@ export function useGuests(eventId: string | undefined) {
     queryKey: ['guests', eventId],
     queryFn: async () => {
       if (!eventId) return [];
-      const { data, error } = await supabase
-        .from('guests')
-        .select('*')
-        .eq('event_id', eventId)
-        .order('last_name', { ascending: true });
-      if (error) throw error;
-      return data as Guest[];
+      
+      // Fetch up to 10,000 guests using pagination
+      const pageSize = 1000;
+      const maxGuests = 10000;
+      const allGuests: Guest[] = [];
+      
+      for (let page = 0; page < maxGuests / pageSize; page++) {
+        const { data, error } = await supabase
+          .from('guests')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('last_name', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        allGuests.push(...(data as Guest[]));
+        
+        if (data.length < pageSize) break; // No more pages
+      }
+      
+      return allGuests;
     },
     enabled: !!eventId,
   });
