@@ -9,6 +9,7 @@ import { ProgressRing } from '@/components/stats/ProgressRing';
 import { GuestSearch } from '@/components/checkin/GuestSearch';
 import { GuestCard } from '@/components/checkin/GuestCard';
 import { ImportDialog } from '@/components/import/ImportDialog';
+import { ExportButton } from '@/components/export/ExportButton';
 import { useEvent, useDeleteEvent } from '@/hooks/useEvents';
 import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from '@/hooks/useGuests';
 import { useAuth } from '@/hooks/useAuth';
@@ -192,6 +193,7 @@ export default function EventDetail() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ExportButton guests={guests || []} eventName={event.name} />
             <ImportDialog eventId={event.id} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
