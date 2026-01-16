@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import lekksideLogo from '@/assets/lekkside-logo.png';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -34,10 +35,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/dashboard" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-shadow">
-                <span className="text-primary-foreground font-bold text-lg">EC</span>
-              </div>
-              <span className="font-bold text-xl text-foreground hidden sm:block">EventCheck</span>
+              <img 
+                src={lekksideLogo} 
+                alt="Lekkside Logo" 
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <span className="font-bold text-lg text-foreground hidden sm:block">Lekkside Check-in</span>
             </Link>
 
             {/* Desktop Navigation */}

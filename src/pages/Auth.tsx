@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import lekksideLogo from '@/assets/lekkside-logo.png';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -101,7 +102,7 @@ export default function Auth() {
     } else {
       toast({
         title: 'Account created',
-        description: 'Welcome to EventCheck!',
+        description: 'Welcome to Lekkside Check-in Portal!',
       });
     }
   };
@@ -110,11 +111,13 @@ export default function Auth() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/25">
-            <span className="text-primary-foreground font-bold text-2xl">EC</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">EventCheck</h1>
-          <p className="text-muted-foreground mt-2">Unified ticketing & check-in system</p>
+          <img 
+            src={lekksideLogo} 
+            alt="Lekkside Logo" 
+            className="w-20 h-20 rounded-full mx-auto mb-4 shadow-lg object-cover"
+          />
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Lekkside Check-in Portal</h1>
+          <p className="text-muted-foreground mt-2">Leading to Fulfilled Futures</p>
         </div>
 
         <Card className="border-2 shadow-lg">
