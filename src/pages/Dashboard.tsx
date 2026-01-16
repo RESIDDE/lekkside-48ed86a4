@@ -14,53 +14,54 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="space-y-8">
+      <div className="space-y-6 sm:space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage your events and track check-ins in real-time.
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+              Manage events and track check-ins in real-time
             </p>
           </div>
           <CreateEventDialog />
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatsCard
             title="Total Events"
             value={totalEvents}
-            icon={<Calendar className="w-5 h-5" />}
+            icon={<Calendar className="w-5 h-5 sm:w-6 sm:h-6" />}
           />
           <StatsCard
-            title="Upcoming Events"
+            title="Upcoming"
             value={upcomingEvents.length}
-            icon={<Clock className="w-5 h-5" />}
+            icon={<Clock className="w-5 h-5 sm:w-6 sm:h-6" />}
           />
           <StatsCard
             title="Total Guests"
             value="—"
-            subtitle="Across all events"
-            icon={<Users className="w-5 h-5" />}
+            subtitle="All events"
+            icon={<Users className="w-5 h-5 sm:w-6 sm:h-6" />}
           />
           <StatsCard
-            title="Checked In Today"
+            title="Today"
             value="—"
-            icon={<CheckCircle className="w-5 h-5" />}
+            subtitle="Checked in"
+            icon={<CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />}
           />
         </div>
 
         {/* Recent Events */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-foreground">Recent Events</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground">Recent Events</h2>
           </div>
           
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-48 rounded-xl" />
+                <Skeleton key={i} className="h-48 rounded-2xl" />
               ))}
             </div>
           ) : events && events.length > 0 ? (
@@ -70,11 +71,13 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 bg-card rounded-xl border border-border">
-              <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium text-foreground">No events yet</h3>
-              <p className="text-muted-foreground mt-1 mb-4">
-                Create your first event to start importing guests and tracking check-ins.
+            <div className="text-center py-12 sm:py-16 bg-card rounded-2xl border-2 border-dashed border-border">
+              <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Calendar className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">No events yet</h3>
+              <p className="text-muted-foreground mt-1 mb-5 text-sm">
+                Create your first event to get started
               </p>
               <CreateEventDialog />
             </div>

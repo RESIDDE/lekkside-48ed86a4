@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -107,29 +107,29 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/25">
             <span className="text-primary-foreground font-bold text-2xl">EC</span>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">EventCheck</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">EventCheck</h1>
           <p className="text-muted-foreground mt-2">Unified ticketing & check-in system</p>
         </div>
 
-        <Card>
+        <Card className="border-2 shadow-lg">
           <Tabs defaultValue="signin">
-            <CardHeader>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="signin">Sign In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            <CardHeader className="pb-4">
+              <TabsList className="grid w-full grid-cols-2 h-12">
+                <TabsTrigger value="signin" className="text-base">Sign In</TabsTrigger>
+                <TabsTrigger value="signup" className="text-base">Sign Up</TabsTrigger>
               </TabsList>
             </CardHeader>
             
-            <CardContent>
-              <TabsContent value="signin">
-                <CardDescription className="mb-4">
-                  Sign in to your account to manage events and check-ins.
+            <CardContent className="pt-0">
+              <TabsContent value="signin" className="mt-0">
+                <CardDescription className="mb-5 text-center">
+                  Sign in to manage events and check-ins
                 </CardDescription>
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
@@ -140,6 +140,7 @@ export default function Auth() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
+                      className="h-12 text-base"
                       required
                     />
                   </div>
@@ -151,18 +152,19 @@ export default function Auth() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
+                      className="h-12 text-base"
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
                     {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
                 </form>
               </TabsContent>
 
-              <TabsContent value="signup">
-                <CardDescription className="mb-4">
-                  Create an account to start managing your events.
+              <TabsContent value="signup" className="mt-0">
+                <CardDescription className="mb-5 text-center">
+                  Create an account to start managing events
                 </CardDescription>
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
@@ -173,6 +175,7 @@ export default function Auth() {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="John Doe"
+                      className="h-12 text-base"
                       required
                     />
                   </div>
@@ -184,6 +187,7 @@ export default function Auth() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
+                      className="h-12 text-base"
                       required
                     />
                   </div>
@@ -195,10 +199,11 @@ export default function Auth() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
+                      className="h-12 text-base"
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
                     {isLoading ? 'Creating account...' : 'Create Account'}
                   </Button>
                 </form>

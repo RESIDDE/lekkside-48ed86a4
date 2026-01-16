@@ -14,9 +14,9 @@ export default function Events() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Events</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage all your events and their guest lists.
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Events</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+              Manage all your events and guest lists
             </p>
           </div>
           <CreateEventDialog />
@@ -26,7 +26,7 @@ export default function Events() {
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-48 rounded-xl" />
+              <Skeleton key={i} className="h-48 rounded-2xl" />
             ))}
           </div>
         ) : events && events.length > 0 ? (
@@ -36,11 +36,13 @@ export default function Events() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-card rounded-xl border border-border">
-            <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium text-foreground">No events yet</h3>
-            <p className="text-muted-foreground mt-1 mb-4">
-              Create your first event to get started.
+          <div className="text-center py-12 sm:py-16 bg-card rounded-2xl border-2 border-dashed border-border">
+            <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Calendar className="w-7 h-7 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground">No events yet</h3>
+            <p className="text-muted-foreground mt-1 mb-5 text-sm">
+              Create your first event to get started
             </p>
             <CreateEventDialog />
           </div>

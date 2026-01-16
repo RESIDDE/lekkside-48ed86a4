@@ -12,17 +12,20 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, subtitle, icon, className }: StatsCardProps) {
   return (
-    <div className={cn('bg-card rounded-xl border border-border p-6', className)}>
-      <div className="flex items-start justify-between">
-        <div>
+    <div className={cn(
+      'bg-card rounded-2xl border border-border p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow',
+      className
+    )}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold text-foreground mt-1">{value}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1.5">{value}</p>
           {subtitle && (
-            <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subtitle}</p>
           )}
         </div>
         {icon && (
-          <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary flex-shrink-0">
             {icon}
           </div>
         )}
