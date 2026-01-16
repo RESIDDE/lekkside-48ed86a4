@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Users, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Users, Trash2, Download, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -143,9 +143,9 @@ export default function EventDetail() {
     return (
       <AppLayout>
         <div className="space-y-6">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
         </div>
       </AppLayout>
     );
@@ -154,9 +154,14 @@ export default function EventDetail() {
   if (!event) {
     return (
       <AppLayout>
-        <div className="text-center py-12">
+        <div className="text-center py-16">
+          <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Calendar className="w-8 h-8 text-muted-foreground" />
+          </div>
           <h2 className="text-xl font-semibold text-foreground">Event not found</h2>
-          <Button variant="outline" className="mt-4" onClick={() => navigate('/events')}>
+          <p className="text-muted-foreground mt-1">This event may have been deleted.</p>
+          <Button variant="outline" className="mt-6" onClick={() => navigate('/events')}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Events
           </Button>
         </div>
@@ -168,53 +173,59 @@ export default function EventDetail() {
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/events')}>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => navigate('/events')}
+              className="h-10 w-10 flex-shrink-0 -ml-2"
+            >
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{event.name}</h1>
-              <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">{event.name}</h1>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
                 {event.date && (
                   <span className="flex items-center">
-                    <Calendar className="w-4 h-4 mr-1" />
+                    <Calendar className="w-4 h-4 mr-1.5 flex-shrink-0" />
                     {format(new Date(event.date), 'PPP p')}
                   </span>
                 )}
                 {event.venue && (
                   <span className="flex items-center">
-                    <MapPin className="w-4 h-4 mr-1" />
-                    {event.venue}
+                    <MapPin className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                    <span className="truncate">{event.venue}</span>
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Action buttons - full width on mobile */}
+          <div className="flex flex-wrap gap-2">
             <ExportButton guests={guests || []} eventName={event.name} />
             <ImportDialog eventId={event.id} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive">
+                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive h-10 w-10 ml-auto">
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="mx-4 max-w-[calc(100%-2rem)] sm:max-w-lg">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Event</AlertDialogTitle>
                   <AlertDialogDescription>
                     This will permanently delete "{event.name}" and all {stats.total} guests. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                  <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteEvent}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    Delete
+                    Delete Event
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -223,38 +234,40 @@ export default function EventDetail() {
         </div>
 
         {/* Stats Panel */}
-        <div className="bg-card rounded-xl border border-border p-6">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <ProgressRing percentage={stats.percentage} />
+        <div className="bg-card rounded-2xl border border-border p-4 sm:p-6 shadow-sm">
+          <div className="flex flex-col lg:flex-row items-center gap-6">
+            <div className="flex-shrink-0">
+              <ProgressRing percentage={stats.percentage} size={140} strokeWidth={10} />
+            </div>
             
             <div className="flex-1 w-full">
-              <div className="grid grid-cols-3 gap-4 text-center md:text-left">
-                <div>
-                  <p className="text-3xl font-bold text-foreground">{stats.total}</p>
-                  <p className="text-sm text-muted-foreground">Total Guests</p>
+              <div className="grid grid-cols-3 gap-3 sm:gap-6">
+                <div className="text-center lg:text-left bg-muted/50 rounded-xl p-3 sm:p-4">
+                  <p className="text-2xl sm:text-3xl font-bold text-foreground">{stats.total}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Total</p>
                 </div>
-                <div>
-                  <p className="text-3xl font-bold text-green-600">{stats.checkedIn}</p>
-                  <p className="text-sm text-muted-foreground">Checked In</p>
+                <div className="text-center lg:text-left bg-[hsl(var(--success))]/10 rounded-xl p-3 sm:p-4">
+                  <p className="text-2xl sm:text-3xl font-bold text-[hsl(var(--success))]">{stats.checkedIn}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Checked In</p>
                 </div>
-                <div>
-                  <p className="text-3xl font-bold text-amber-600">{stats.pending}</p>
-                  <p className="text-sm text-muted-foreground">Pending</p>
+                <div className="text-center lg:text-left bg-[hsl(var(--warning))]/10 rounded-xl p-3 sm:p-4">
+                  <p className="text-2xl sm:text-3xl font-bold text-[hsl(var(--warning))]">{stats.pending}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Pending</p>
                 </div>
               </div>
 
               {stats.ticketTypes && Object.keys(stats.ticketTypes).length > 0 && (
                 <div className="mt-4 pt-4 border-t border-border">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">By Ticket Type</p>
-                  <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground mb-3">By Ticket Type</p>
+                  <div className="space-y-2.5">
                     {Object.entries(stats.ticketTypes).map(([type, data]) => (
-                      <div key={type} className="flex items-center gap-2">
-                        <span className="text-sm w-24 truncate">{type}</span>
+                      <div key={type} className="flex items-center gap-3">
+                        <span className="text-sm w-20 sm:w-28 truncate font-medium">{type}</span>
                         <Progress 
                           value={data.total > 0 ? (data.checkedIn / data.total) * 100 : 0} 
-                          className="flex-1 h-2" 
+                          className="flex-1 h-2.5" 
                         />
-                        <span className="text-xs text-muted-foreground w-16 text-right">
+                        <span className="text-xs text-muted-foreground w-14 text-right font-medium">
                           {data.checkedIn}/{data.total}
                         </span>
                       </div>
@@ -268,27 +281,31 @@ export default function EventDetail() {
 
         {/* Guest List */}
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Guest List
-            </h2>
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-muted-foreground" />
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground">Guest List</h2>
           </div>
 
           <GuestSearch value={searchQuery} onChange={setSearchQuery} />
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({stats.pending})</TabsTrigger>
-              <TabsTrigger value="checked-in">Checked In ({stats.checkedIn})</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="w-full grid grid-cols-3 h-12">
+              <TabsTrigger value="all" className="text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                All ({stats.total})
+              </TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs sm:text-sm data-[state=active]:bg-[hsl(var(--warning))] data-[state=active]:text-[hsl(var(--warning-foreground))]">
+                Pending ({stats.pending})
+              </TabsTrigger>
+              <TabsTrigger value="checked-in" className="text-xs sm:text-sm data-[state=active]:bg-[hsl(var(--success))] data-[state=active]:text-[hsl(var(--success-foreground))]">
+                Done ({stats.checkedIn})
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value={activeTab} className="mt-4">
               {guestsLoading ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-32 rounded-xl" />
+                    <Skeleton key={i} className="h-28 rounded-2xl" />
                   ))}
                 </div>
               ) : filteredGuests.length > 0 ? (
@@ -304,28 +321,33 @@ export default function EventDetail() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-muted/50 rounded-xl">
-                  <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <div className="text-center py-12 sm:py-16 bg-muted/30 rounded-2xl border-2 border-dashed border-border">
+                  <div className="w-14 h-14 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-7 h-7 text-muted-foreground" />
+                  </div>
                   {searchQuery ? (
                     <>
-                      <h3 className="text-lg font-medium text-foreground">No matching guests</h3>
-                      <p className="text-muted-foreground mt-1">
+                      <h3 className="text-lg font-semibold text-foreground">No matching guests</h3>
+                      <p className="text-muted-foreground mt-1 text-sm">
                         Try a different search term
                       </p>
                     </>
                   ) : stats.total === 0 ? (
                     <>
-                      <h3 className="text-lg font-medium text-foreground">No guests yet</h3>
-                      <p className="text-muted-foreground mt-1 mb-4">
+                      <h3 className="text-lg font-semibold text-foreground">No guests yet</h3>
+                      <p className="text-muted-foreground mt-1 mb-5 text-sm">
                         Import your guest list to start checking in
                       </p>
                       <ImportDialog eventId={event.id} />
                     </>
                   ) : (
                     <>
-                      <h3 className="text-lg font-medium text-foreground">
-                        {activeTab === 'pending' ? 'All guests checked in!' : 'No checked-in guests yet'}
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {activeTab === 'pending' ? 'All guests checked in! 🎉' : 'No checked-in guests yet'}
                       </h3>
+                      <p className="text-muted-foreground mt-1 text-sm">
+                        {activeTab === 'pending' ? 'Great job!' : 'Start checking in guests from the list'}
+                      </p>
                     </>
                   )}
                 </div>

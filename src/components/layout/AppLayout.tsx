@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, LogOut, Menu, X, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useState } from 'react';
@@ -27,21 +27,21 @@ export function AppLayout({ children }: AppLayoutProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border sticky top-0 z-50">
+      <header className="bg-card border-b border-border sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link to="/dashboard" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">EC</span>
+            <Link to="/dashboard" className="flex items-center gap-3 group">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-shadow">
+                <span className="text-primary-foreground font-bold text-lg">EC</span>
               </div>
-              <span className="font-semibold text-lg text-foreground hidden sm:block">EventCheck</span>
+              <span className="font-bold text-xl text-foreground hidden sm:block">EventCheck</span>
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-1">
+            <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(item.href);
@@ -50,9 +50,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                     key={item.href}
                     to={item.href}
                     className={cn(
-                      'flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all',
                       isActive
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     )}
                   >
@@ -64,20 +64,25 @@ export function AppLayout({ children }: AppLayoutProps) {
             </nav>
 
             {/* User Menu */}
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-muted-foreground hidden sm:block">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <span className="text-sm text-muted-foreground hidden lg:block max-w-[200px] truncate">
                 {user?.email}
               </span>
-              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleSignOut}
+                className="hidden sm:flex text-muted-foreground hover:text-foreground"
+              >
                 <LogOut className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Sign out</span>
+                Sign out
               </Button>
 
               {/* Mobile menu button */}
               <Button
                 variant="ghost"
-                size="sm"
-                className="md:hidden"
+                size="icon"
+                className="md:hidden h-10 w-10"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -88,8 +93,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav className="md:hidden border-t border-border bg-card">
-            <div className="px-4 py-2 space-y-1">
+          <nav className="md:hidden border-t border-border bg-card animate-in slide-in-from-top-2 duration-200">
+            <div className="px-4 py-3 space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(item.href);
@@ -99,24 +104,41 @@ export function AppLayout({ children }: AppLayoutProps) {
                     to={item.href}
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
-                      'flex items-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center justify-between px-4 py-4 rounded-xl text-base font-medium transition-all',
                       isActive
                         ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        : 'text-foreground hover:bg-muted active:bg-muted'
                     )}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      <Icon className="w-5 h-5" />
+                      <span>{item.label}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 opacity-50" />
                   </Link>
                 );
               })}
+              
+              <div className="pt-2 mt-2 border-t border-border">
+                <div className="px-4 py-2 text-sm text-muted-foreground truncate">
+                  {user?.email}
+                </div>
+                <Button 
+                  variant="ghost" 
+                  onClick={handleSignOut}
+                  className="w-full justify-start px-4 py-4 h-auto text-base font-medium text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <LogOut className="w-5 h-5 mr-3" />
+                  Sign out
+                </Button>
+              </div>
             </div>
           </nav>
         )}
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {children}
       </main>
     </div>
