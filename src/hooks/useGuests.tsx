@@ -92,13 +92,13 @@ export function useCheckIn() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ guestId, userId }: { guestId: string; userId: string }) => {
+    mutationFn: async ({ guestId, userId }: { guestId: string; userId?: string | null }) => {
       const { data, error } = await supabase
         .from('guests')
         .update({
           checked_in: true,
           checked_in_at: new Date().toISOString(),
-          checked_in_by: userId,
+          checked_in_by: userId || null,
         })
         .eq('id', guestId)
         .select()

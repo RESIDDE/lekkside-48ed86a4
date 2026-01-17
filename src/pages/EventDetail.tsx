@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Users, Trash2, Download, Upload } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Users, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { GuestSearch } from '@/components/checkin/GuestSearch';
 import { GuestCard } from '@/components/checkin/GuestCard';
 import { ImportDialog } from '@/components/import/ImportDialog';
 import { ExportButton } from '@/components/export/ExportButton';
+import { ShareCheckInButton } from '@/components/share/ShareCheckInButton';
 import { useEvent, useDeleteEvent } from '@/hooks/useEvents';
 import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from '@/hooks/useGuests';
 import { useAuth } from '@/hooks/useAuth';
@@ -205,6 +206,7 @@ export default function EventDetail() {
           {/* Action buttons - full width on mobile */}
           <div className="flex flex-wrap gap-2">
             <ExportButton guests={guests || []} eventName={event.name} />
+            <ShareCheckInButton eventId={event.id} />
             <ImportDialog eventId={event.id} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
