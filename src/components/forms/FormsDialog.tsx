@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Link2, Trash2, ToggleLeft, ToggleRight, Users, Eye, Settings2, FileText } from "lucide-react";
+import { Plus, Link2, Trash2, ToggleLeft, ToggleRight, Users, Eye, Settings2, FileText, QrCode } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { useForms, useFormRegistrationCount, type CustomField } from "@/hooks/us
 import { toast } from "sonner";
 import { FormFieldsEditor } from "./FormFieldsEditor";
 import { FormPreviewDialog } from "./FormPreviewDialog";
+import { QRCodeDialog } from "./QRCodeDialog";
 
 interface FormsDialogProps {
   eventId: string;
@@ -26,6 +27,7 @@ export const FormsDialog = ({ eventId, open, onOpenChange }: FormsDialogProps) =
   const [isCreating, setIsCreating] = useState(false);
   const [editingForm, setEditingForm] = useState<{ id: string; name: string; fields: CustomField[] } | null>(null);
   const [previewingForm, setPreviewingForm] = useState<{ name: string; fields: CustomField[] } | null>(null);
+  const [qrForm, setQrForm] = useState<{ id: string; name: string } | null>(null);
 
   const handleCreateForm = async () => {
     if (!newFormName.trim()) {
@@ -117,6 +119,7 @@ export const FormsDialog = ({ eventId, open, onOpenChange }: FormsDialogProps) =
                     key={form.id}
                     form={form}
                     onCopyLink={() => copyFormLink(form.id)}
+                    onShowQR={() => setQrForm({ id: form.id, name: form.name })}
                     onPreview={() => setPreviewingForm({ name: form.name, fields: form.custom_fields })}
                     onEdit={() => setEditingForm({ id: form.id, name: form.name, fields: form.custom_fields })}
                     onToggle={() => toggleFormActive.mutate({ formId: form.id, isActive: !form.is_active })}
@@ -149,6 +152,16 @@ export const FormsDialog = ({ eventId, open, onOpenChange }: FormsDialogProps) =
           customFields={previewingForm.fields}
         />
       )}
+
+      {/* QR Code Dialog */}
+      {qrForm && (
+        <QRCodeDialog
+          open={!!qrForm}
+          onOpenChange={(open) => !open && setQrForm(null)}
+          formUrl={`${window.location.origin}/form/${qrForm.id}`}
+          formName={qrForm.name}
+        />
+      )}
     </>
   );
 };
@@ -161,13 +174,14 @@ interface FormItemProps {
     custom_fields: CustomField[];
   };
   onCopyLink: () => void;
+  onShowQR: () => void;
   onPreview: () => void;
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }
 
-const FormItem = ({ form, onCopyLink, onPreview, onEdit, onToggle, onDelete }: FormItemProps) => {
+const FormItem = ({ form, onCopyLink, onShowQR, onPreview, onEdit, onToggle, onDelete }: FormItemProps) => {
   const registrationCount = useFormRegistrationCount(form.id);
 
   return (
@@ -197,12 +211,23 @@ const FormItem = ({ form, onCopyLink, onPreview, onEdit, onToggle, onDelete }: F
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 rounded-xl"
+          className="rounded-xl"
           onClick={onCopyLink}
           disabled={!form.is_active}
         >
           <Link2 className="h-3 w-3 mr-1" />
-          Copy Link
+          Link
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-xl"
+          onClick={onShowQR}
+          disabled={!form.is_active}
+          title="Show QR code"
+        >
+          <QrCode className="h-3 w-3 mr-1" />
+          QR
         </Button>
         <Button
           variant="ghost"
