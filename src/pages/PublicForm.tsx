@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { usePublicForm } from "@/hooks/useForms";
+import { useParams } from "react-router-dom";
+import { usePublicForm, type CustomField } from "@/hooks/useForms";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Calendar, MapPin, CheckCircle, Loader2 } from "lucide-react";
@@ -22,7 +30,6 @@ interface FormData {
 
 const PublicForm = () => {
   const { formId } = useParams<{ formId: string }>();
-  const navigate = useNavigate();
   const { form, isLoading, error } = usePublicForm(formId || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -33,9 +40,16 @@ const PublicForm = () => {
     phone: "",
     notes: "",
   });
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | boolean>>({});
+
+  const customFields = ((form?.custom_fields as unknown) as CustomField[]) || [];
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCustomFieldChange = (fieldId: string, value: string | boolean) => {
+    setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,9 +65,29 @@ const PublicForm = () => {
       return;
     }
 
+    // Validate required custom fields
+    for (const field of customFields) {
+      if (field.required) {
+        const value = customFieldValues[field.id];
+        if (value === undefined || value === "" || value === false) {
+          toast.error(`Please fill in the required field: ${field.label}`);
+          return;
+        }
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
+      // Prepare custom fields data with labels as keys for better readability
+      const customFieldsData: Record<string, string | boolean> = {};
+      for (const field of customFields) {
+        const value = customFieldValues[field.id];
+        if (value !== undefined && value !== "") {
+          customFieldsData[field.label] = value;
+        }
+      }
+
       const { error } = await supabase.from("guests").insert({
         event_id: form.event_id,
         first_name: formData.first_name.trim(),
@@ -62,6 +96,7 @@ const PublicForm = () => {
         phone: formData.phone.trim() || null,
         notes: formData.notes.trim() || null,
         registered_via: formId,
+        custom_fields: Object.keys(customFieldsData).length > 0 ? customFieldsData : null,
       });
 
       if (error) throw error;
@@ -240,6 +275,66 @@ const PublicForm = () => {
                   rows={3}
                 />
               </div>
+
+              {/* Custom Fields */}
+              {customFields.map((field) => (
+                <div key={field.id} className="space-y-2">
+                  <Label htmlFor={field.id}>
+                    {field.label} {field.required && "*"}
+                  </Label>
+                  {field.type === "text" && (
+                    <Input
+                      id={field.id}
+                      value={(customFieldValues[field.id] as string) || ""}
+                      onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                      className="rounded-xl"
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === "textarea" && (
+                    <Textarea
+                      id={field.id}
+                      value={(customFieldValues[field.id] as string) || ""}
+                      onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                      className="rounded-xl resize-none"
+                      rows={3}
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === "select" && (
+                    <Select
+                      value={(customFieldValues[field.id] as string) || ""}
+                      onValueChange={(value) => handleCustomFieldChange(field.id, value)}
+                      required={field.required}
+                    >
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {field.options?.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {field.type === "checkbox" && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={field.id}
+                        checked={(customFieldValues[field.id] as boolean) || false}
+                        onCheckedChange={(checked) => handleCustomFieldChange(field.id, !!checked)}
+                      />
+                      <Label htmlFor={field.id} className="text-sm font-normal cursor-pointer">
+                        Yes
+                      </Label>
+                    </div>
+                  )}
+                </div>
+              ))}
 
               <Button
                 type="submit"
