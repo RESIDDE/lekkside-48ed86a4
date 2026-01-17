@@ -7,18 +7,24 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GuestCard } from "@/components/checkin/GuestCard";
 import { ProgressRing } from "@/components/stats/ProgressRing";
-import { useEvent } from "@/hooks/useEvents";
 import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from "@/hooks/useGuests";
+import { useStation } from "@/hooks/useStations";
 import { useToast } from "@/hooks/use-toast";
 import lekkLogo from "@/assets/lekkside-logo.png";
 
 export default function CheckInOnly() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { stationId } = useParams<{ stationId: string }>();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "checked-in">("all");
   const { toast } = useToast();
 
-  const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
+  // Fetch station details to get event ID
+  const { data: stationData, isLoading: stationLoading, error: stationError } = useStation(stationId);
+  
+  const eventId = stationData?.event_id;
+  const event = stationData?.events;
+  const station = stationData;
+
   const { data: guests = [], isLoading: guestsLoading } = useGuests(eventId);
   const stats = useGuestStats(eventId);
   const checkIn = useCheckIn();
@@ -52,7 +58,7 @@ export default function CheckInOnly() {
 
   const handleCheckIn = (guestId: string) => {
     checkIn.mutate(
-      { guestId, userId: null },
+      { guestId, userId: null, stationId: stationId || null },
       {
         onSuccess: () => {
           toast({
@@ -89,7 +95,7 @@ export default function CheckInOnly() {
     });
   };
 
-  if (eventLoading || guestsLoading) {
+  if (stationLoading || guestsLoading) {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card">
@@ -106,13 +112,27 @@ export default function CheckInOnly() {
     );
   }
 
-  if (eventError || !event) {
+  if (stationError || !station || !event) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Event Not Found</h1>
+          <h1 className="text-2xl font-bold text-foreground">Station Not Found</h1>
           <p className="text-muted-foreground">
-            This check-in link may be invalid or the event has been deleted.
+            This check-in link may be invalid, inactive, or the event has been deleted.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if station is inactive
+  if (!station.is_active) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-foreground">Station Inactive</h1>
+          <p className="text-muted-foreground">
+            This check-in station has been deactivated by the event organizer.
           </p>
         </div>
       </div>
@@ -126,7 +146,10 @@ export default function CheckInOnly() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
             <img src={lekkLogo} alt="Lekkside" className="h-8 w-auto" />
-            <span className="text-lg font-semibold text-foreground">Check-in Station</span>
+            <div className="flex flex-col">
+              <span className="text-lg font-semibold text-foreground">Check-in Station</span>
+              <span className="text-sm text-muted-foreground">{station.name}</span>
+            </div>
           </div>
         </div>
       </header>

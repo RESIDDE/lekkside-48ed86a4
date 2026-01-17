@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      checkin_stations: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkin_stations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_forms: {
         Row: {
           created_at: string
@@ -93,6 +128,7 @@ export type Database = {
           checked_in: boolean
           checked_in_at: string | null
           checked_in_by: string | null
+          checked_in_by_station: string | null
           created_at: string
           custom_fields: Json | null
           email: string | null
@@ -111,6 +147,7 @@ export type Database = {
           checked_in?: boolean
           checked_in_at?: string | null
           checked_in_by?: string | null
+          checked_in_by_station?: string | null
           created_at?: string
           custom_fields?: Json | null
           email?: string | null
@@ -129,6 +166,7 @@ export type Database = {
           checked_in?: boolean
           checked_in_at?: string | null
           checked_in_by?: string | null
+          checked_in_by_station?: string | null
           created_at?: string
           custom_fields?: Json | null
           email?: string | null
@@ -144,6 +182,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "guests_checked_in_by_station_fkey"
+            columns: ["checked_in_by_station"]
+            isOneToOne: false
+            referencedRelation: "checkin_stations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "guests_event_id_fkey"
             columns: ["event_id"]

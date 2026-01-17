@@ -92,13 +92,14 @@ export function useCheckIn() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ guestId, userId }: { guestId: string; userId?: string | null }) => {
+    mutationFn: async ({ guestId, userId, stationId }: { guestId: string; userId?: string | null; stationId?: string | null }) => {
       const { data, error } = await supabase
         .from('guests')
         .update({
           checked_in: true,
           checked_in_at: new Date().toISOString(),
           checked_in_by: userId || null,
+          checked_in_by_station: stationId || null,
         })
         .eq('id', guestId)
         .select()
@@ -108,6 +109,7 @@ export function useCheckIn() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['guests', data.event_id] });
+      queryClient.invalidateQueries({ queryKey: ['station-stats'] });
     },
   });
 }
@@ -123,6 +125,7 @@ export function useUndoCheckIn() {
           checked_in: false,
           checked_in_at: null,
           checked_in_by: null,
+          checked_in_by_station: null,
         })
         .eq('id', guestId)
         .select()
@@ -132,6 +135,7 @@ export function useUndoCheckIn() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['guests', data.event_id] });
+      queryClient.invalidateQueries({ queryKey: ['station-stats'] });
     },
   });
 }

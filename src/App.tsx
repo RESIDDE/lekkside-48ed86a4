@@ -28,7 +28,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/:eventId" element={<EventDetail />} />
-            <Route path="/checkin/:eventId" element={<CheckInOnly />} />
+            <Route path="/checkin/:stationId" element={<CheckInOnly />} />
             <Route path="/form/:formId" element={<PublicForm />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

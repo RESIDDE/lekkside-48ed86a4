@@ -10,7 +10,8 @@ import { GuestSearch } from '@/components/checkin/GuestSearch';
 import { GuestCard } from '@/components/checkin/GuestCard';
 import { ImportDialog } from '@/components/import/ImportDialog';
 import { ExportButton } from '@/components/export/ExportButton';
-import { ShareCheckInButton } from '@/components/share/ShareCheckInButton';
+import { CheckInStationsDialog } from '@/components/share/CheckInStationsDialog';
+import { StationsStatsPanel } from '@/components/share/StationsStatsPanel';
 import { FormsButton } from '@/components/forms/FormsButton';
 import { useEvent, useDeleteEvent } from '@/hooks/useEvents';
 import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from '@/hooks/useGuests';
@@ -208,7 +209,7 @@ export default function EventDetail() {
           <div className="flex flex-wrap gap-2">
             <ImportDialog eventId={event.id} />
             <ExportButton guests={guests || []} eventName={event.name} />
-            <ShareCheckInButton eventId={event.id} />
+            <CheckInStationsDialog eventId={event.id} />
             <FormsButton eventId={event.id} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -282,6 +283,9 @@ export default function EventDetail() {
             </div>
           </div>
         </div>
+
+        {/* Station Stats */}
+        <StationsStatsPanel eventId={event.id} />
 
         {/* Guest List */}
         <div className="space-y-4">
