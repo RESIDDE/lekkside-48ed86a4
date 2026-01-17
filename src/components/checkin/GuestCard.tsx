@@ -117,6 +117,25 @@ export function GuestCard({ guest, onCheckIn, onUndoCheckIn, isLoading }: GuestC
               {guest.notes}
             </p>
           )}
+
+          {/* Custom Fields */}
+          {guest.custom_fields && Object.keys(guest.custom_fields as Record<string, unknown>).length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {Object.entries(guest.custom_fields as Record<string, unknown>).map(([key, value]) => {
+                if (!value) return null;
+                const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
+                if (!displayValue) return null;
+                return (
+                  <div key={key} className="flex items-start gap-2 text-sm">
+                    <span className="text-muted-foreground font-medium capitalize min-w-0">
+                      {key.replace(/_/g, ' ')}:
+                    </span>
+                    <span className="text-foreground break-words">{displayValue}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
