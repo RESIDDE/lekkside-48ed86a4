@@ -2,11 +2,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+export interface CustomField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select" | "checkbox";
+  required: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
 export interface EventForm {
   id: string;
   event_id: string;
   name: string;
   is_active: boolean;
+  custom_fields: CustomField[];
   created_at: string;
   updated_at: string;
 }
@@ -24,7 +34,12 @@ export const useForms = (eventId: string) => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as EventForm[];
+      
+      // Transform the data to properly type custom_fields
+      return (data || []).map((form) => ({
+        ...form,
+        custom_fields: (form.custom_fields as unknown as CustomField[]) || [],
+      })) as EventForm[];
     },
     enabled: !!eventId,
   });
@@ -85,12 +100,31 @@ export const useForms = (eventId: string) => {
     },
   });
 
+  const updateFormFields = useMutation({
+    mutationFn: async ({ formId, customFields }: { formId: string; customFields: CustomField[] }) => {
+      const { error } = await supabase
+        .from("event_forms")
+        .update({ custom_fields: customFields as unknown as null })
+        .eq("id", formId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms", eventId] });
+      toast.success("Form fields updated successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to update form fields: " + error.message);
+    },
+  });
+
   return {
     forms,
     isLoading,
     createForm,
     toggleFormActive,
     deleteForm,
+    updateFormFields,
   };
 };
 
