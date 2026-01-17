@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Events from "./pages/Events";
 import EventDetail from "./pages/EventDetail";
 import CheckInOnly from "./pages/CheckInOnly";
+import PublicForm from "./pages/PublicForm";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/events" element={<Events />} />
             <Route path="/events/:eventId" element={<EventDetail />} />
             <Route path="/checkin/:eventId" element={<CheckInOnly />} />
+            <Route path="/form/:formId" element={<PublicForm />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

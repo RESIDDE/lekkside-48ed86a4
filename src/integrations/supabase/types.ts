@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      event_forms: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_forms_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           capacity: number | null
@@ -64,6 +99,7 @@ export type Database = {
           last_name: string | null
           notes: string | null
           phone: string | null
+          registered_via: string | null
           ticket_number: string | null
           ticket_type: string | null
           updated_at: string
@@ -81,6 +117,7 @@ export type Database = {
           last_name?: string | null
           notes?: string | null
           phone?: string | null
+          registered_via?: string | null
           ticket_number?: string | null
           ticket_type?: string | null
           updated_at?: string
@@ -98,6 +135,7 @@ export type Database = {
           last_name?: string | null
           notes?: string | null
           phone?: string | null
+          registered_via?: string | null
           ticket_number?: string | null
           ticket_type?: string | null
           updated_at?: string
@@ -108,6 +146,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guests_registered_via_fkey"
+            columns: ["registered_via"]
+            isOneToOne: false
+            referencedRelation: "event_forms"
             referencedColumns: ["id"]
           },
         ]

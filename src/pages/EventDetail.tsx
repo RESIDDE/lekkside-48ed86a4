@@ -11,6 +11,7 @@ import { GuestCard } from '@/components/checkin/GuestCard';
 import { ImportDialog } from '@/components/import/ImportDialog';
 import { ExportButton } from '@/components/export/ExportButton';
 import { ShareCheckInButton } from '@/components/share/ShareCheckInButton';
+import { FormsButton } from '@/components/forms/FormsButton';
 import { useEvent, useDeleteEvent } from '@/hooks/useEvents';
 import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from '@/hooks/useGuests';
 import { useAuth } from '@/hooks/useAuth';
@@ -205,9 +206,10 @@ export default function EventDetail() {
 
           {/* Action buttons - full width on mobile */}
           <div className="flex flex-wrap gap-2">
+            <ImportDialog eventId={event.id} />
             <ExportButton guests={guests || []} eventName={event.name} />
             <ShareCheckInButton eventId={event.id} />
-            <ImportDialog eventId={event.id} />
+            <FormsButton eventId={event.id} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size="icon" className="text-destructive hover:text-destructive h-10 w-10 ml-auto">
