@@ -57,7 +57,18 @@ export function ExportButton({ guests, eventName }: ExportButtonProps) {
       return;
     }
 
-    // Define CSV headers
+    // Collect all unique custom field keys across all guests
+    const customFieldKeys = new Set<string>();
+    filteredGuests.forEach(guest => {
+      if (guest.custom_fields && typeof guest.custom_fields === 'object') {
+        Object.keys(guest.custom_fields as Record<string, unknown>).forEach(key => {
+          customFieldKeys.add(key);
+        });
+      }
+    });
+    const sortedCustomFieldKeys = Array.from(customFieldKeys).sort();
+
+    // Define CSV headers (standard + custom fields)
     const headers = [
       'First Name',
       'Last Name',
@@ -68,20 +79,31 @@ export function ExportButton({ guests, eventName }: ExportButtonProps) {
       'Notes',
       'Checked In',
       'Checked In At',
+      ...sortedCustomFieldKeys.map(key => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())),
     ];
 
     // Convert guests to CSV rows
-    const rows = filteredGuests.map(guest => [
-      guest.first_name || '',
-      guest.last_name || '',
-      guest.email || '',
-      guest.phone || '',
-      guest.ticket_type || '',
-      guest.ticket_number || '',
-      guest.notes || '',
-      guest.checked_in ? 'Yes' : 'No',
-      guest.checked_in_at ? new Date(guest.checked_in_at).toLocaleString() : '',
-    ]);
+    const rows = filteredGuests.map(guest => {
+      const customFields = (guest.custom_fields as Record<string, unknown>) || {};
+      const customFieldValues = sortedCustomFieldKeys.map(key => {
+        const value = customFields[key];
+        if (Array.isArray(value)) return value.join('; ');
+        return value ? String(value) : '';
+      });
+
+      return [
+        guest.first_name || '',
+        guest.last_name || '',
+        guest.email || '',
+        guest.phone || '',
+        guest.ticket_type || '',
+        guest.ticket_number || '',
+        guest.notes || '',
+        guest.checked_in ? 'Yes' : 'No',
+        guest.checked_in_at ? new Date(guest.checked_in_at).toLocaleString() : '',
+        ...customFieldValues,
+      ];
+    });
 
     // Escape CSV values
     const escapeCSV = (value: string) => {
