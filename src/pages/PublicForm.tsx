@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { usePublicForm, type CustomField } from "@/hooks/useForms";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,9 +16,14 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, MapPin, CheckCircle, Loader2 } from "lucide-react";
+import { Calendar, MapPin, CheckCircle, Loader2, Mail, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import lekkLogo from "@/assets/lekkside-logo.png";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 interface FormData {
   first_name: string;
@@ -42,7 +47,34 @@ const PublicForm = () => {
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | boolean>>({});
 
+  // OTP verification state
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const customFields = ((form?.custom_fields as unknown) as CustomField[]) || [];
+
+  // Cooldown timer effect
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
+
+  // Reset OTP state when email changes
+  useEffect(() => {
+    if (emailVerified || otpSent) {
+      setEmailVerified(false);
+      setOtpSent(false);
+      setOtpCode("");
+      setOtpError("");
+    }
+  }, [formData.email]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -50,6 +82,77 @@ const PublicForm = () => {
 
   const handleCustomFieldChange = (fieldId: string, value: string | boolean) => {
     setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleSendOtp = async () => {
+    if (!formData.email.trim()) {
+      toast.error("Please enter an email address first");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setOtpError("");
+
+    try {
+      const event = form?.events as any;
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: {
+          email: formData.email,
+          formId: formId,
+          eventName: event?.name || "Event Registration",
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setOtpSent(true);
+      setResendCooldown(60);
+      toast.success("Verification code sent to your email");
+    } catch (err: any) {
+      console.error("Error sending OTP:", err);
+      setOtpError(err.message || "Failed to send verification code");
+      toast.error(err.message || "Failed to send verification code");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError("Please enter the complete 6-digit code");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-otp", {
+        body: {
+          email: formData.email,
+          code: otpCode,
+          formId: formId,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setEmailVerified(true);
+      toast.success("Email verified successfully!");
+    } catch (err: any) {
+      console.error("Error verifying OTP:", err);
+      setOtpError(err.message || "Invalid verification code");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,6 +165,12 @@ const PublicForm = () => {
 
     if (!formData.email.trim() && !formData.phone.trim()) {
       toast.error("Please enter either an email or phone number");
+      return;
+    }
+
+    // Check if email is provided but not verified
+    if (formData.email.trim() && !emailVerified) {
+      toast.error("Please verify your email address before submitting");
       return;
     }
 
@@ -175,6 +284,8 @@ const PublicForm = () => {
     );
   }
 
+  const canSubmit = formData.email.trim() ? emailVerified : formData.phone.trim().length > 0;
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
@@ -240,17 +351,101 @@ const PublicForm = () => {
                 </div>
               </div>
 
+              {/* Email Field with OTP Verification */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  placeholder="john@example.com"
-                  className="rounded-xl"
-                />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleChange("email", e.target.value)}
+                      placeholder="john@example.com"
+                      className="rounded-xl pr-10"
+                      disabled={emailVerified}
+                    />
+                    {emailVerified && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
+                    )}
+                  </div>
+                  {!emailVerified && formData.email.trim() && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSendOtp}
+                      disabled={isSendingOtp || resendCooldown > 0}
+                      className="rounded-xl whitespace-nowrap"
+                    >
+                      {isSendingOtp ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : resendCooldown > 0 ? (
+                        `${resendCooldown}s`
+                      ) : otpSent ? (
+                        "Resend"
+                      ) : (
+                        <>
+                          <Mail className="h-4 w-4 mr-1" />
+                          Verify
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {emailVerified && (
+                  <p className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Email verified
+                  </p>
+                )}
               </div>
+
+              {/* OTP Input Section */}
+              {otpSent && !emailVerified && (
+                <div className="space-y-3 p-4 bg-muted/50 rounded-xl">
+                  <Label>Enter verification code</Label>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a 6-digit code to {formData.email}
+                  </p>
+                  <div className="flex flex-col items-center gap-3">
+                    <InputOTP
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(value) => {
+                        setOtpCode(value);
+                        setOtpError("");
+                      }}
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                    {otpError && (
+                      <p className="text-sm text-destructive">{otpError}</p>
+                    )}
+                    <Button
+                      type="button"
+                      onClick={handleVerifyOtp}
+                      disabled={isVerifyingOtp || otpCode.length !== 6}
+                      className="rounded-xl"
+                    >
+                      {isVerifyingOtp ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify Code"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
@@ -339,7 +534,7 @@ const PublicForm = () => {
               <Button
                 type="submit"
                 className="w-full min-h-[44px] rounded-2xl"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !canSubmit}
               >
                 {isSubmitting ? (
                   <>
@@ -352,7 +547,7 @@ const PublicForm = () => {
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                * Required fields. Please provide either an email or phone number.
+                * Required fields. {formData.email.trim() ? "Please verify your email to continue." : "Please provide either an email or phone number."}
               </p>
             </form>
           </CardContent>
