@@ -274,7 +274,7 @@ const PublicForm = () => {
               </div>
               <h2 className="text-2xl font-semibold">You're Registered!</h2>
               <p className="text-muted-foreground">
-                Thank you for registering for <strong>{event?.name}</strong>. 
+                Thank you, <strong>{formData.first_name}</strong>! You've successfully registered for <strong>{event?.name}</strong>. 
                 We look forward to seeing you there!
               </p>
               {event?.date && (
