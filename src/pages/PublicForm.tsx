@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, MapPin, CheckCircle, Loader2, CheckCircle2, Mail } from "lucide-react";
+import { Calendar, MapPin, Loader2, CheckCircle2, Mail } from "lucide-react";
 import { format } from "date-fns";
 import lekkLogo from "@/assets/lekkside-logo.png";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import RegistrationTicket from "@/components/forms/RegistrationTicket";
 
 interface FormData {
   first_name: string;
@@ -42,6 +43,9 @@ const PublicForm = () => {
     notes: "",
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | boolean>>({});
+  const [confirmationNumber, setConfirmationNumber] = useState("");
+  const [registeredAt, setRegisteredAt] = useState("");
+  const [submittedCustomFields, setSubmittedCustomFields] = useState<Record<string, string | boolean>>({});
 
   // OTP Email verification state
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'verified' | 'error'>('idle');
@@ -211,7 +215,7 @@ const PublicForm = () => {
         }
       }
 
-      const { error } = await supabase.from("guests").insert({
+      const { data: insertedGuest, error } = await supabase.from("guests").insert({
         event_id: form.event_id,
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
@@ -220,12 +224,43 @@ const PublicForm = () => {
         notes: formData.notes.trim() || null,
         registered_via: formId,
         custom_fields: Object.keys(customFieldsData).length > 0 ? customFieldsData : null,
-      });
+      }).select('id, created_at').single();
 
       if (error) throw error;
 
+      // Generate confirmation number from guest ID
+      const confNum = `LEKK-${insertedGuest.id.slice(0, 8).toUpperCase()}`;
+      setConfirmationNumber(confNum);
+      setRegisteredAt(insertedGuest.created_at);
+      setSubmittedCustomFields(customFieldsData);
+
+      // Send confirmation email if email is provided
+      if (formData.email.trim()) {
+        try {
+          await supabase.functions.invoke('send-confirmation-ticket', {
+            body: {
+              firstName: formData.first_name.trim(),
+              lastName: formData.last_name.trim(),
+              email: formData.email.trim(),
+              phone: formData.phone.trim() || undefined,
+              notes: formData.notes.trim() || undefined,
+              customFields: Object.keys(customFieldsData).length > 0 ? customFieldsData : undefined,
+              eventName: event?.name,
+              eventDate: event?.date || undefined,
+              eventVenue: event?.venue || undefined,
+              confirmationNumber: confNum,
+            }
+          });
+          toast.success("Registration successful! Ticket sent to your email.");
+        } catch (emailErr) {
+          console.error('Failed to send confirmation email:', emailErr);
+          toast.success("Registration successful! (Email delivery may be delayed)");
+        }
+      } else {
+        toast.success("Registration successful!");
+      }
+
       setIsSubmitted(true);
-      toast.success("Registration successful!");
     } catch (err: any) {
       toast.error("Registration failed: " + err.message);
     } finally {
@@ -266,31 +301,27 @@ const PublicForm = () => {
           </div>
         </header>
 
-        <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md rounded-2xl">
-            <CardContent className="pt-6 text-center space-y-4">
-              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
-              </div>
-              <h2 className="text-2xl font-semibold">You're Registered!</h2>
-              <p className="text-muted-foreground">
-                Thank you, <strong>{formData.first_name}</strong>! You've successfully registered for <strong>{event?.name}</strong>. 
-                We look forward to seeing you there!
+        <div className="flex-1 flex items-center justify-center p-4 py-8">
+          <div className="space-y-4">
+            <RegistrationTicket
+              firstName={formData.first_name}
+              lastName={formData.last_name}
+              email={formData.email || undefined}
+              phone={formData.phone || undefined}
+              notes={formData.notes || undefined}
+              customFields={Object.keys(submittedCustomFields).length > 0 ? submittedCustomFields : undefined}
+              eventName={event?.name || "Event"}
+              eventDate={event?.date || undefined}
+              eventVenue={event?.venue || undefined}
+              confirmationNumber={confirmationNumber}
+              registeredAt={registeredAt}
+            />
+            {formData.email && (
+              <p className="text-center text-sm text-muted-foreground">
+                📧 A copy of this ticket has been sent to <strong>{formData.email}</strong>
               </p>
-              {event?.date && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  <span>{format(new Date(event.date), "PPP 'at' p")}</span>
-                </div>
-              )}
-              {event?.venue && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  <span>{event.venue}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            )}
+          </div>
         </div>
       </div>
     );
