@@ -107,7 +107,19 @@ const PublicForm = () => {
 
       setEmailStatus('sent');
       setResendCountdown(60);
-      toast.success("Verification code sent to your email");
+      
+      // DEBUG MODE: Auto-fill OTP if returned (for testing while DNS is being configured)
+      if (data?.debugCode) {
+        console.log('Debug mode: Auto-filling OTP code');
+        setOtpCode(data.debugCode);
+        // Auto-verify after a short delay to show the UI
+        setTimeout(() => {
+          verifyOtp(data.debugCode);
+        }, 500);
+        toast.success("Debug mode: Code auto-filled for testing");
+      } else {
+        toast.success("Verification code sent to your email");
+      }
     } catch (err: any) {
       console.error('Error sending OTP:', err);
       setEmailStatus('error');
@@ -408,6 +420,9 @@ const PublicForm = () => {
                       <Mail className="h-4 w-4" />
                       <span>Enter the 6-digit code sent to {formData.email}</span>
                     </div>
+                    <p className="text-xs text-muted-foreground text-center">
+                      💡 Check your spam/junk folder if you don't see it within 2 minutes
+                    </p>
                     <div className="flex justify-center">
                       <InputOTP 
                         maxLength={6} 

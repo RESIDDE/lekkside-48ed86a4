@@ -124,12 +124,19 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Connecting to SMTP server: ${smtpHost}:${smtpPort}`);
 
+    // Generate a unique Message-ID for tracking
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2)}@${smtpHost}>`;
+    
+    // Determine TLS mode based on port
+    const useTLS = smtpPort === 465;
+    const useStartTLS = smtpPort === 587;
+
     // Create SMTP client
     const client = new SMTPClient({
       connection: {
         hostname: smtpHost,
         port: smtpPort,
-        tls: true,
+        tls: useTLS,
         auth: {
           username: smtpUser,
           password: smtpPass,
@@ -138,10 +145,15 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     try {
+      const fromName = "Lekkside Check-in Portal";
+      const fromAddress = smtpUser;
+      
       await client.send({
-        from: smtpUser,
+        from: `${fromName} <${fromAddress}>`,
         to: email,
+        replyTo: fromAddress,
         subject: `Your verification code for ${eventName || "event registration"}`,
+        content: `Your verification code is: ${code}\n\nThis code expires in 10 minutes. If you didn't request this code, you can safely ignore this email.`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
             <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Verify your email</h1>
@@ -156,14 +168,22 @@ const handler = async (req: Request): Promise<Response> => {
             </p>
           </div>
         `,
+        headers: {
+          "Message-ID": messageId,
+        },
       });
 
       await client.close();
 
-      console.log("Email sent successfully via SMTP");
+      console.log(`Email sent successfully via SMTP with Message-ID: ${messageId}`);
 
+      // DEBUG MODE: Return code for testing (remove once DNS is configured)
       return new Response(
-        JSON.stringify({ success: true, message: "Verification code sent" }),
+        JSON.stringify({ 
+          success: true, 
+          message: "Verification code sent",
+          debugCode: code // TEMPORARY: Remove after DNS/deliverability is fixed
+        }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     } catch (smtpError: any) {
