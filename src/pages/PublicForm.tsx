@@ -203,6 +203,12 @@ const PublicForm = () => {
       }
     }
 
+    // Validate form data before proceeding
+    if (!form?.id || !form?.event_id) {
+      toast.error("Invalid form link. Please use the correct registration link.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -215,16 +221,21 @@ const PublicForm = () => {
         }
       }
 
-      const { data: insertedGuest, error } = await supabase.from("guests").insert({
+      // Use form.id (the actual DB form id) instead of formId (URL param) for registered_via
+      const insertPayload = {
         event_id: form.event_id,
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
         notes: formData.notes.trim() || null,
-        registered_via: formId,
+        registered_via: form.id,
         custom_fields: Object.keys(customFieldsData).length > 0 ? customFieldsData : null,
-      }).select('id, created_at').single();
+      };
+
+      console.log("PublicForm insert payload:", insertPayload);
+
+      const { data: insertedGuest, error } = await supabase.from("guests").insert(insertPayload).select('id, created_at').single();
 
       if (error) throw error;
 
