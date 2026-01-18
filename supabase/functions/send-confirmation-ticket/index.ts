@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "npm:resend@2.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,17 +26,6 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) {
-      console.error("RESEND_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Email service not configured" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
-    const resend = new Resend(resendApiKey);
-
     const data: TicketEmailRequest = await req.json();
     const {
       firstName,
@@ -56,6 +45,38 @@ const handler = async (req: Request): Promise<Response> => {
     if (!email || !firstName || !eventName) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email format" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Verify MX records exist for the email domain
+    const domain = email.split("@")[1];
+    console.log(`Checking MX records for domain: ${domain}`);
+    
+    try {
+      const mxRecords = await Deno.resolveDns(domain, "MX");
+      console.log(`MX records found for ${domain}:`, mxRecords);
+      
+      if (!mxRecords || mxRecords.length === 0) {
+        console.error(`No MX records found for domain: ${domain}`);
+        return new Response(
+          JSON.stringify({ error: "This email domain cannot receive emails. Please use a valid email address." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    } catch (dnsError: any) {
+      console.error(`MX lookup failed for ${domain}:`, dnsError.message);
+      return new Response(
+        JSON.stringify({ error: "This email domain does not exist or cannot receive emails. Please check your email address." }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -217,31 +238,82 @@ We look forward to seeing you there!
 Lekkside Check-in Portal
     `;
 
-    // Send email using Resend
-    const emailResponse = await resend.emails.send({
-      from: "Lekkside Check-in Portal <onboarding@resend.dev>",
-      to: [email],
-      subject: `🎟️ Your Registration for ${eventName} is Confirmed!`,
-      html: htmlContent,
-      text: plainText,
+    // Get SMTP credentials from environment
+    const smtpHost = Deno.env.get("SMTP_HOST")!;
+    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
+    const smtpUser = Deno.env.get("SMTP_USER")!;
+    const smtpPass = Deno.env.get("SMTP_PASS")!;
+
+    console.log(`Connecting to SMTP server: ${smtpHost}:${smtpPort} for recipient: ${email}`);
+
+    // Generate a unique Message-ID for tracking
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2)}.ticket@${smtpHost}>`;
+    
+    // Determine TLS mode based on port
+    const useTLS = smtpPort === 465;
+
+    // Create SMTP client
+    const client = new SMTPClient({
+      connection: {
+        hostname: smtpHost,
+        port: smtpPort,
+        tls: useTLS,
+        auth: {
+          username: smtpUser,
+          password: smtpPass,
+        },
+      },
     });
 
-    console.log("Resend email response:", emailResponse);
+    try {
+      const fromName = "Lekkside Check-in Portal";
+      const fromAddress = smtpUser;
+      
+      console.log(`Sending email from ${fromAddress} to ${email} with Message-ID: ${messageId}`);
+      
+      await client.send({
+        from: `${fromName} <${fromAddress}>`,
+        to: email,
+        replyTo: fromAddress,
+        subject: `🎟️ Your Registration for ${eventName} is Confirmed!`,
+        content: plainText,
+        html: htmlContent,
+        headers: {
+          "Message-ID": messageId,
+        },
+      });
 
-    if (emailResponse.error) {
-      console.error("Resend error:", emailResponse.error);
+      await client.close();
+
+      console.log(`Confirmation ticket email sent successfully to ${email} via SMTP, Message-ID: ${messageId}`);
+
       return new Response(
-        JSON.stringify({ error: emailResponse.error.message }),
+        JSON.stringify({ success: true, message: "Confirmation ticket sent", messageId }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    } catch (smtpError: any) {
+      console.error(`SMTP error sending to ${email}:`, smtpError);
+      console.error("SMTP error details:", {
+        message: smtpError.message,
+        name: smtpError.name,
+        code: smtpError.code,
+        recipientDomain: domain,
+      });
+      
+      try {
+        await client.close();
+      } catch (_) {
+        // Ignore close errors
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "Failed to send confirmation email. Please try again.",
+          details: smtpError.message 
+        }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
-
-    console.log(`Confirmation ticket email sent successfully to ${email}, id: ${emailResponse.data?.id}`);
-
-    return new Response(
-      JSON.stringify({ success: true, message: "Confirmation ticket sent", id: emailResponse.data?.id }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
   } catch (error: any) {
     console.error("Error in send-confirmation-ticket function:", error);
     return new Response(
