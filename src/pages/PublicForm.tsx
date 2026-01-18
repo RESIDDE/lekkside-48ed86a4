@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { usePublicForm, type CustomField } from "@/hooks/useForms";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, MapPin, CheckCircle, Loader2, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { Calendar, MapPin, CheckCircle, Loader2, CheckCircle2, Mail } from "lucide-react";
 import { format } from "date-fns";
 import lekkLogo from "@/assets/lekkside-logo.png";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 interface FormData {
   first_name: string;
@@ -26,12 +27,6 @@ interface FormData {
   email: string;
   phone: string;
   notes: string;
-}
-
-interface EmailFeedback {
-  issues: string[];
-  suggestion?: string;
-  confidence: number;
 }
 
 const PublicForm = () => {
@@ -48,17 +43,31 @@ const PublicForm = () => {
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | boolean>>({});
 
-  // AI Email verification state
-  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'valid' | 'warning' | 'invalid'>('idle');
-  const [emailFeedback, setEmailFeedback] = useState<EmailFeedback | null>(null);
+  // OTP Email verification state
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'verified' | 'error'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   const customFields = ((form?.custom_fields as unknown) as CustomField[]) || [];
+  const event = form?.events as any;
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (resendCountdown > 0) {
+      const timer = setTimeout(() => setResendCountdown(r => r - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCountdown]);
 
   const handleChange = (field: keyof FormData, value: string) => {
     // Reset email verification if email changes
     if (field === "email") {
       setEmailStatus('idle');
-      setEmailFeedback(null);
+      setOtpCode('');
+      setOtpError('');
+      setResendCountdown(0);
     }
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -67,58 +76,84 @@ const PublicForm = () => {
     setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   };
 
-  const verifyEmailWithAI = async (email: string) => {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !trimmedEmail.includes('@')) {
-      setEmailStatus('idle');
+  const sendOtp = async () => {
+    const email = formData.email.trim();
+    if (!email || !email.includes('@')) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
-    setEmailStatus('checking');
-    
+    setEmailStatus('sending');
+    setOtpError('');
+    setOtpCode('');
+
     try {
-      const { data, error } = await supabase.functions.invoke('ai-verify-email', {
-        body: { email: trimmedEmail }
+      const { data, error } = await supabase.functions.invoke('send-otp', {
+        body: { email, formId, eventName: event?.name }
       });
 
       if (error) {
-        console.error('AI verification error:', error);
-        // Fallback: allow submission but show warning
-        setEmailStatus('warning');
-        setEmailFeedback({
-          issues: ['Could not verify email automatically'],
-          confidence: 50
-        });
+        console.error('Send OTP error:', error);
+        setEmailStatus('error');
+        setOtpError('Failed to send verification code');
         return;
       }
 
-      const { isValid, issues, suggestion, confidence } = data;
-      setEmailFeedback({ issues: issues || [], suggestion, confidence: confidence || 0 });
-
-      if (!isValid) {
-        setEmailStatus('invalid');
-      } else if ((issues && issues.length > 0) || confidence < 80) {
-        setEmailStatus('warning');
-      } else {
-        setEmailStatus('valid');
+      if (data?.error) {
+        setEmailStatus('error');
+        setOtpError(data.error);
+        return;
       }
-    } catch (err) {
-      console.error('Error calling AI verification:', err);
-      setEmailStatus('warning');
-      setEmailFeedback({
-        issues: ['Could not verify email automatically'],
-        confidence: 50
-      });
+
+      setEmailStatus('sent');
+      setResendCountdown(60);
+      toast.success("Verification code sent to your email");
+    } catch (err: any) {
+      console.error('Error sending OTP:', err);
+      setEmailStatus('error');
+      setOtpError('Failed to send verification code');
     }
   };
 
-  const acceptSuggestion = () => {
-    if (emailFeedback?.suggestion) {
-      setFormData(prev => ({ ...prev, email: emailFeedback.suggestion! }));
-      setEmailStatus('idle');
-      setEmailFeedback(null);
-      // Re-verify with the new email
-      setTimeout(() => verifyEmailWithAI(emailFeedback.suggestion!), 100);
+  const verifyOtp = async (code: string) => {
+    if (code.length !== 6) return;
+
+    setIsVerifyingOtp(true);
+    setOtpError('');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-otp', {
+        body: { email: formData.email.trim(), code, formId }
+      });
+
+      if (error) {
+        console.error('Verify OTP error:', error);
+        setOtpError('Failed to verify code');
+        setIsVerifyingOtp(false);
+        return;
+      }
+
+      if (data?.error) {
+        setOtpError(data.error);
+        setIsVerifyingOtp(false);
+        return;
+      }
+
+      setEmailStatus('verified');
+      setIsVerifyingOtp(false);
+      toast.success("Email verified successfully!");
+    } catch (err: any) {
+      console.error('Error verifying OTP:', err);
+      setOtpError('Failed to verify code');
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleOtpChange = (value: string) => {
+    setOtpCode(value);
+    setOtpError('');
+    if (value.length === 6) {
+      verifyOtp(value);
     }
   };
 
@@ -135,13 +170,9 @@ const PublicForm = () => {
       return;
     }
 
-    // Block submission if email is being verified or is invalid
-    if (formData.email.trim() && (emailStatus === 'checking' || emailStatus === 'invalid')) {
-      if (emailStatus === 'checking') {
-        toast.error("Please wait for email verification to complete");
-      } else {
-        toast.error("Please fix the email address issues before submitting");
-      }
+    // Block submission if email is provided but not verified
+    if (formData.email.trim() && emailStatus !== 'verified') {
+      toast.error("Please verify your email address before submitting");
       return;
     }
 
@@ -213,8 +244,6 @@ const PublicForm = () => {
     );
   }
 
-  const event = form.events as any;
-
   if (isSubmitted) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -255,12 +284,12 @@ const PublicForm = () => {
     );
   }
 
-  // Can submit if: has name AND (email is valid/warning/idle OR has phone)
+  // Can submit if: has name AND (email is verified OR has phone without email)
   const canSubmit = 
     formData.first_name.trim() && 
     formData.last_name.trim() && 
     (
-      (formData.email.trim() && emailStatus !== 'invalid' && emailStatus !== 'checking') ||
+      (formData.email.trim() && emailStatus === 'verified') ||
       (!formData.email.trim() && formData.phone.trim().length > 0)
     );
 
@@ -329,98 +358,94 @@ const PublicForm = () => {
                 </div>
               </div>
 
-              {/* Email Field with AI Verification */}
+              {/* Email Field with OTP Verification */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <div className="relative">
+                <div className="flex gap-2">
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
-                    onBlur={() => verifyEmailWithAI(formData.email)}
                     placeholder="john@example.com"
-                    className={`rounded-xl pr-10 ${
-                      emailStatus === 'valid' ? 'border-green-500 focus-visible:ring-green-500' :
-                      emailStatus === 'invalid' ? 'border-red-500 focus-visible:ring-red-500' :
-                      emailStatus === 'warning' ? 'border-amber-500 focus-visible:ring-amber-500' :
+                    className={`rounded-xl flex-1 ${
+                      emailStatus === 'verified' ? 'border-green-500' :
+                      emailStatus === 'error' ? 'border-destructive' :
                       ''
                     }`}
+                    disabled={emailStatus === 'verified'}
                   />
-                  {emailStatus === 'checking' && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-muted-foreground" />
+                  {emailStatus !== 'verified' && formData.email.includes('@') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={sendOtp}
+                      disabled={emailStatus === 'sending' || resendCountdown > 0}
+                      className="shrink-0"
+                    >
+                      {emailStatus === 'sending' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : resendCountdown > 0 ? (
+                        `${resendCountdown}s`
+                      ) : emailStatus === 'sent' ? (
+                        'Resend'
+                      ) : (
+                        'Verify'
+                      )}
+                    </Button>
                   )}
-                  {emailStatus === 'valid' && (
-                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
-                  )}
-                  {emailStatus === 'warning' && (
-                    <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-500" />
-                  )}
-                  {emailStatus === 'invalid' && (
-                    <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
+                  {emailStatus === 'verified' && (
+                    <div className="flex items-center px-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    </div>
                   )}
                 </div>
-                
-                {/* AI Verification Feedback */}
-                {emailStatus === 'checking' && (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" /> AI is verifying...
-                  </p>
+
+                {/* OTP Input - shown after code is sent */}
+                {emailStatus === 'sent' && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Mail className="h-4 w-4" />
+                      <span>Enter the 6-digit code sent to {formData.email}</span>
+                    </div>
+                    <div className="flex justify-center">
+                      <InputOTP 
+                        maxLength={6} 
+                        value={otpCode} 
+                        onChange={handleOtpChange}
+                        disabled={isVerifyingOtp}
+                      >
+                        <InputOTPGroup>
+                          <InputOTPSlot index={0} />
+                          <InputOTPSlot index={1} />
+                          <InputOTPSlot index={2} />
+                          <InputOTPSlot index={3} />
+                          <InputOTPSlot index={4} />
+                          <InputOTPSlot index={5} />
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+                    {isVerifyingOtp && (
+                      <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Verifying...
+                      </p>
+                    )}
+                    {otpError && (
+                      <p className="text-sm text-destructive text-center">{otpError}</p>
+                    )}
+                  </div>
                 )}
-                {emailStatus === 'valid' && (
+
+                {/* Error state */}
+                {emailStatus === 'error' && (
+                  <p className="text-sm text-destructive">{otpError}</p>
+                )}
+
+                {/* Verified state */}
+                {emailStatus === 'verified' && (
                   <p className="text-sm text-green-600 flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" /> Email looks valid
+                    <CheckCircle2 className="h-3 w-3" /> Email verified
                   </p>
-                )}
-                {emailStatus === 'warning' && emailFeedback && (
-                  <div className="text-sm text-amber-600 space-y-1">
-                    <p className="flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> Potential issues:
-                    </p>
-                    {emailFeedback.issues.length > 0 && (
-                      <ul className="text-xs ml-4 space-y-0.5">
-                        {emailFeedback.issues.map((issue, i) => (
-                          <li key={i}>• {issue}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {emailFeedback.suggestion && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={acceptSuggestion}
-                        className="text-xs h-7 mt-1"
-                      >
-                        Did you mean: {emailFeedback.suggestion}?
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {emailStatus === 'invalid' && emailFeedback && (
-                  <div className="text-sm text-red-600 space-y-1">
-                    <p className="flex items-center gap-1">
-                      <XCircle className="h-3 w-3" /> Invalid email:
-                    </p>
-                    {emailFeedback.issues.length > 0 && (
-                      <ul className="text-xs ml-4 space-y-0.5">
-                        {emailFeedback.issues.map((issue, i) => (
-                          <li key={i}>• {issue}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {emailFeedback.suggestion && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={acceptSuggestion}
-                        className="text-xs h-7 mt-1"
-                      >
-                        Did you mean: {emailFeedback.suggestion}?
-                      </Button>
-                    )}
-                  </div>
                 )}
               </div>
 
@@ -459,7 +484,7 @@ const PublicForm = () => {
                       id={field.id}
                       value={(customFieldValues[field.id] as string) || ""}
                       onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                      placeholder={field.placeholder}
                       className="rounded-xl"
                       required={field.required}
                     />
@@ -469,7 +494,7 @@ const PublicForm = () => {
                       id={field.id}
                       value={(customFieldValues[field.id] as string) || ""}
                       onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-                      placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                      placeholder={field.placeholder}
                       className="rounded-xl resize-none"
                       rows={3}
                       required={field.required}
@@ -479,10 +504,9 @@ const PublicForm = () => {
                     <Select
                       value={(customFieldValues[field.id] as string) || ""}
                       onValueChange={(value) => handleCustomFieldChange(field.id, value)}
-                      required={field.required}
                     >
                       <SelectTrigger className="rounded-xl">
-                        <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                        <SelectValue placeholder={field.placeholder || "Select an option"} />
                       </SelectTrigger>
                       <SelectContent>
                         {field.options?.map((option) => (
@@ -500,32 +524,32 @@ const PublicForm = () => {
                         checked={(customFieldValues[field.id] as boolean) || false}
                         onCheckedChange={(checked) => handleCustomFieldChange(field.id, !!checked)}
                       />
-                      <Label htmlFor={field.id} className="text-sm font-normal cursor-pointer">
-                        Yes
+                      <Label htmlFor={field.id} className="font-normal cursor-pointer">
+                        {field.placeholder || field.label}
                       </Label>
                     </div>
                   )}
                 </div>
               ))}
 
+              <p className="text-xs text-muted-foreground">
+                * Email or phone number is required
+              </p>
+
               <Button
                 type="submit"
-                className="w-full min-h-[44px] rounded-2xl"
-                disabled={isSubmitting || !canSubmit}
+                className="w-full rounded-xl min-h-[44px]"
+                disabled={!canSubmit || isSubmitting}
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Registering...
                   </>
                 ) : (
                   "Register"
                 )}
               </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                * Required fields. Please provide either an email or phone number.
-              </p>
             </form>
           </CardContent>
         </Card>
