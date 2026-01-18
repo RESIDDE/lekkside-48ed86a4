@@ -133,15 +133,29 @@ export const usePublicForm = (formId: string) => {
   const { data: form, isLoading, error } = useQuery({
     queryKey: ["public-form", formId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First fetch the form
+      const { data: formData, error: formError } = await supabase
         .from("event_forms")
-        .select("*, events(*)")
+        .select("*")
         .eq("id", formId)
         .eq("is_active", true)
         .single();
 
-      if (error) throw error;
-      return data;
+      if (formError) throw formError;
+      if (!formData) return null;
+
+      // Then fetch the event separately (works better with RLS for anon users)
+      const { data: eventData } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", formData.event_id)
+        .single();
+
+      // Return form with nested events object for compatibility with existing code
+      return {
+        ...formData,
+        events: eventData,
+      };
     },
     enabled: !!formId,
   });
