@@ -222,7 +222,12 @@ const PublicForm = () => {
       }
 
       // Use form.id (the actual DB form id) instead of formId (URL param) for registered_via
+      // NOTE: Anonymous users cannot SELECT from "guests" (by design), so we avoid `.select()` after insert.
+      const guestId = crypto.randomUUID();
+      const registeredAtIso = new Date().toISOString();
+
       const insertPayload = {
+        id: guestId,
         event_id: form.event_id,
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
@@ -235,14 +240,13 @@ const PublicForm = () => {
 
       console.log("PublicForm insert payload:", insertPayload);
 
-      const { data: insertedGuest, error } = await supabase.from("guests").insert(insertPayload).select('id, created_at').single();
-
+      const { error } = await supabase.from("guests").insert(insertPayload);
       if (error) throw error;
 
       // Generate confirmation number from guest ID
-      const confNum = `LEKK-${insertedGuest.id.slice(0, 8).toUpperCase()}`;
+      const confNum = `LEKK-${guestId.slice(0, 8).toUpperCase()}`;
       setConfirmationNumber(confNum);
-      setRegisteredAt(insertedGuest.created_at);
+      setRegisteredAt(registeredAtIso);
       setSubmittedCustomFields(customFieldsData);
 
       // Send confirmation email if email is provided
