@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { usePublicForm, type CustomField } from "@/hooks/useForms";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, MapPin, CheckCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Calendar, MapPin, CheckCircle, Loader2, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import lekkLogo from "@/assets/lekkside-logo.png";
 
@@ -26,6 +26,12 @@ interface FormData {
   email: string;
   phone: string;
   notes: string;
+}
+
+interface EmailFeedback {
+  issues: string[];
+  suggestion?: string;
+  confidence: number;
 }
 
 const PublicForm = () => {
@@ -42,31 +48,17 @@ const PublicForm = () => {
   });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | boolean>>({});
 
-  // Google OAuth verification state
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [isVerifyingWithGoogle, setIsVerifyingWithGoogle] = useState(false);
+  // AI Email verification state
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'valid' | 'warning' | 'invalid'>('idle');
+  const [emailFeedback, setEmailFeedback] = useState<EmailFeedback | null>(null);
 
   const customFields = ((form?.custom_fields as unknown) as CustomField[]) || [];
 
-  // Check for verified email on mount (after OAuth redirect)
-  useEffect(() => {
-    const checkAuthSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        // User returned from Google OAuth with verified email
-        setFormData(prev => ({ ...prev, email: session.user.email || "" }));
-        setEmailVerified(true);
-        // Sign out the temporary session (guests don't need to stay logged in)
-        await supabase.auth.signOut();
-      }
-    };
-    checkAuthSession();
-  }, []);
-
   const handleChange = (field: keyof FormData, value: string) => {
-    // If email changes after verification, reset verification status
-    if (field === "email" && emailVerified) {
-      setEmailVerified(false);
+    // Reset email verification if email changes
+    if (field === "email") {
+      setEmailStatus('idle');
+      setEmailFeedback(null);
     }
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -75,23 +67,58 @@ const PublicForm = () => {
     setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   };
 
-  const handleGoogleVerify = async () => {
-    setIsVerifyingWithGoogle(true);
+  const verifyEmailWithAI = async (email: string) => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setEmailStatus('idle');
+      return;
+    }
+
+    setEmailStatus('checking');
+    
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/form/${formId}`,
-          queryParams: {
-            prompt: "select_account", // Always show account picker
-          },
-        },
+      const { data, error } = await supabase.functions.invoke('ai-verify-email', {
+        body: { email: trimmedEmail }
       });
-      if (error) throw error;
-    } catch (err: any) {
-      console.error("Error with Google sign-in:", err);
-      toast.error("Failed to open Google sign-in");
-      setIsVerifyingWithGoogle(false);
+
+      if (error) {
+        console.error('AI verification error:', error);
+        // Fallback: allow submission but show warning
+        setEmailStatus('warning');
+        setEmailFeedback({
+          issues: ['Could not verify email automatically'],
+          confidence: 50
+        });
+        return;
+      }
+
+      const { isValid, issues, suggestion, confidence } = data;
+      setEmailFeedback({ issues: issues || [], suggestion, confidence: confidence || 0 });
+
+      if (!isValid) {
+        setEmailStatus('invalid');
+      } else if ((issues && issues.length > 0) || confidence < 80) {
+        setEmailStatus('warning');
+      } else {
+        setEmailStatus('valid');
+      }
+    } catch (err) {
+      console.error('Error calling AI verification:', err);
+      setEmailStatus('warning');
+      setEmailFeedback({
+        issues: ['Could not verify email automatically'],
+        confidence: 50
+      });
+    }
+  };
+
+  const acceptSuggestion = () => {
+    if (emailFeedback?.suggestion) {
+      setFormData(prev => ({ ...prev, email: emailFeedback.suggestion! }));
+      setEmailStatus('idle');
+      setEmailFeedback(null);
+      // Re-verify with the new email
+      setTimeout(() => verifyEmailWithAI(emailFeedback.suggestion!), 100);
     }
   };
 
@@ -108,9 +135,13 @@ const PublicForm = () => {
       return;
     }
 
-    // Check if email is provided but not verified
-    if (formData.email.trim() && !emailVerified) {
-      toast.error("Please verify your email address before submitting");
+    // Block submission if email is being verified or is invalid
+    if (formData.email.trim() && (emailStatus === 'checking' || emailStatus === 'invalid')) {
+      if (emailStatus === 'checking') {
+        toast.error("Please wait for email verification to complete");
+      } else {
+        toast.error("Please fix the email address issues before submitting");
+      }
       return;
     }
 
@@ -224,7 +255,14 @@ const PublicForm = () => {
     );
   }
 
-  const canSubmit = formData.email.trim() ? emailVerified : formData.phone.trim().length > 0;
+  // Can submit if: has name AND (email is valid/warning/idle OR has phone)
+  const canSubmit = 
+    formData.first_name.trim() && 
+    formData.last_name.trim() && 
+    (
+      (formData.email.trim() && emailStatus !== 'invalid' && emailStatus !== 'checking') ||
+      (!formData.email.trim() && formData.phone.trim().length > 0)
+    );
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -291,65 +329,98 @@ const PublicForm = () => {
                 </div>
               </div>
 
-              {/* Email Field with Google Verification */}
+              {/* Email Field with AI Verification */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                      placeholder="john@example.com"
-                      className="rounded-xl pr-10"
-                      disabled={emailVerified}
-                    />
-                    {emailVerified && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
-                    )}
-                  </div>
-                  {!emailVerified && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleGoogleVerify}
-                      disabled={isVerifyingWithGoogle}
-                      className="rounded-xl whitespace-nowrap"
-                    >
-                      {isVerifyingWithGoogle ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24">
-                            <path
-                              fill="currentColor"
-                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                            />
-                            <path
-                              fill="currentColor"
-                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                            />
-                            <path
-                              fill="currentColor"
-                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                            />
-                            <path
-                              fill="currentColor"
-                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                            />
-                          </svg>
-                          Verify with Google
-                        </>
-                      )}
-                    </Button>
+                <div className="relative">
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleChange("email", e.target.value)}
+                    onBlur={() => verifyEmailWithAI(formData.email)}
+                    placeholder="john@example.com"
+                    className={`rounded-xl pr-10 ${
+                      emailStatus === 'valid' ? 'border-green-500 focus-visible:ring-green-500' :
+                      emailStatus === 'invalid' ? 'border-red-500 focus-visible:ring-red-500' :
+                      emailStatus === 'warning' ? 'border-amber-500 focus-visible:ring-amber-500' :
+                      ''
+                    }`}
+                  />
+                  {emailStatus === 'checking' && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-muted-foreground" />
+                  )}
+                  {emailStatus === 'valid' && (
+                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
+                  )}
+                  {emailStatus === 'warning' && (
+                    <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-500" />
+                  )}
+                  {emailStatus === 'invalid' && (
+                    <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
                   )}
                 </div>
-                {emailVerified && (
-                  <p className="text-sm text-green-600 flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Email verified via Google
+                
+                {/* AI Verification Feedback */}
+                {emailStatus === 'checking' && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> AI is verifying...
                   </p>
+                )}
+                {emailStatus === 'valid' && (
+                  <p className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Email looks valid
+                  </p>
+                )}
+                {emailStatus === 'warning' && emailFeedback && (
+                  <div className="text-sm text-amber-600 space-y-1">
+                    <p className="flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Potential issues:
+                    </p>
+                    {emailFeedback.issues.length > 0 && (
+                      <ul className="text-xs ml-4 space-y-0.5">
+                        {emailFeedback.issues.map((issue, i) => (
+                          <li key={i}>• {issue}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {emailFeedback.suggestion && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={acceptSuggestion}
+                        className="text-xs h-7 mt-1"
+                      >
+                        Did you mean: {emailFeedback.suggestion}?
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {emailStatus === 'invalid' && emailFeedback && (
+                  <div className="text-sm text-red-600 space-y-1">
+                    <p className="flex items-center gap-1">
+                      <XCircle className="h-3 w-3" /> Invalid email:
+                    </p>
+                    {emailFeedback.issues.length > 0 && (
+                      <ul className="text-xs ml-4 space-y-0.5">
+                        {emailFeedback.issues.map((issue, i) => (
+                          <li key={i}>• {issue}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {emailFeedback.suggestion && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={acceptSuggestion}
+                        className="text-xs h-7 mt-1"
+                      >
+                        Did you mean: {emailFeedback.suggestion}?
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -453,7 +524,7 @@ const PublicForm = () => {
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                * Required fields. {formData.email.trim() ? "Please verify your email with Google to continue." : "Please provide either an email or phone number."}
+                * Required fields. Please provide either an email or phone number.
               </p>
             </form>
           </CardContent>
