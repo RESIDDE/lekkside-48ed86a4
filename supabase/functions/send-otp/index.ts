@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,33 +116,78 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Send email via Resend
-    const emailResponse = await resend.emails.send({
-      from: "Lekkside <onboarding@resend.dev>",
-      to: [email],
-      subject: `Your verification code for ${eventName || "event registration"}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-          <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Verify your email</h1>
-          <p style="color: #666; font-size: 16px; margin-bottom: 24px;">
-            Use the following code to verify your email address for ${eventName || "event registration"}:
-          </p>
-          <div style="background: #f5f5f5; border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${code}</span>
-          </div>
-          <p style="color: #999; font-size: 14px;">
-            This code expires in 10 minutes. If you didn't request this code, you can safely ignore this email.
-          </p>
-        </div>
-      `,
+    // Get SMTP credentials from environment
+    const smtpHost = Deno.env.get("SMTP_HOST")!;
+    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
+    const smtpUser = Deno.env.get("SMTP_USER")!;
+    const smtpPass = Deno.env.get("SMTP_PASS")!;
+
+    console.log(`Connecting to SMTP server: ${smtpHost}:${smtpPort}`);
+
+    // Create SMTP client
+    const client = new SMTPClient({
+      connection: {
+        hostname: smtpHost,
+        port: smtpPort,
+        tls: true,
+        auth: {
+          username: smtpUser,
+          password: smtpPass,
+        },
+      },
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    try {
+      await client.send({
+        from: smtpUser,
+        to: email,
+        subject: `Your verification code for ${eventName || "event registration"}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Verify your email</h1>
+            <p style="color: #666; font-size: 16px; margin-bottom: 24px;">
+              Use the following code to verify your email address for ${eventName || "event registration"}:
+            </p>
+            <div style="background: #f5f5f5; border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 24px;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${code}</span>
+            </div>
+            <p style="color: #999; font-size: 14px;">
+              This code expires in 10 minutes. If you didn't request this code, you can safely ignore this email.
+            </p>
+          </div>
+        `,
+      });
 
-    return new Response(
-      JSON.stringify({ success: true, message: "Verification code sent" }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+      await client.close();
+
+      console.log("Email sent successfully via SMTP");
+
+      return new Response(
+        JSON.stringify({ success: true, message: "Verification code sent" }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    } catch (smtpError: any) {
+      console.error("SMTP error:", smtpError);
+      
+      try {
+        await client.close();
+      } catch (_) {
+        // Ignore close errors
+      }
+      
+      // Delete the verification record since email failed
+      await supabase
+        .from("email_verifications")
+        .delete()
+        .eq("email", email.toLowerCase())
+        .eq("form_id", formId)
+        .eq("code", code);
+      
+      return new Response(
+        JSON.stringify({ error: "Failed to send verification email. Please try again." }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
   } catch (error: any) {
     console.error("Error in send-otp function:", error);
     return new Response(
