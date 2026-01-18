@@ -42,6 +42,29 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Verify MX records exist for the email domain
+    const domain = email.split("@")[1];
+    console.log(`Checking MX records for domain: ${domain}`);
+    
+    try {
+      const mxRecords = await Deno.resolveDns(domain, "MX");
+      console.log(`MX records found for ${domain}:`, mxRecords);
+      
+      if (!mxRecords || mxRecords.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "This email domain cannot receive emails. Please use a valid email address." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    } catch (dnsError: any) {
+      console.error(`MX lookup failed for ${domain}:`, dnsError.message);
+      // DNS errors usually mean the domain doesn't exist or has no MX records
+      return new Response(
+        JSON.stringify({ error: "This email domain does not exist or cannot receive emails. Please check your email address." }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
