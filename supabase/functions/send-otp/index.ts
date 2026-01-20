@@ -9,8 +9,9 @@ const corsHeaders = {
 
 interface SendOtpRequest {
   email: string;
-  formId: string;
-  eventName: string;
+  formId?: string;
+  eventName?: string;
+  purpose?: "registration" | "auth";
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -20,13 +21,21 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, formId, eventName }: SendOtpRequest = await req.json();
+    const { email, formId, eventName, purpose = "registration" }: SendOtpRequest = await req.json();
 
-    console.log(`Sending OTP to ${email} for form ${formId}`);
+    console.log(`Sending OTP to ${email} for ${purpose}${formId ? ` (form: ${formId})` : ""}`);
 
-    if (!email || !formId) {
+    // For auth purpose, formId is optional; for registration, it's required
+    if (!email) {
       return new Response(
-        JSON.stringify({ error: "Email and formId are required" }),
+        JSON.stringify({ error: "Email is required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (purpose === "registration" && !formId) {
+      return new Response(
+        JSON.stringify({ error: "Form ID is required for registration" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -69,15 +78,23 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Rate limiting: Check if a code was sent in the last 60 seconds
-    const { data: recentCode } = await supabase
+    // For auth, we use purpose and null form_id; for registration, we use form_id
+    let rateLimitQuery = supabase
       .from("email_verifications")
       .select("created_at")
       .eq("email", email.toLowerCase())
-      .eq("form_id", formId)
+      .eq("purpose", purpose)
       .gte("created_at", new Date(Date.now() - 60000).toISOString())
       .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
+    
+    if (purpose === "registration" && formId) {
+      rateLimitQuery = rateLimitQuery.eq("form_id", formId);
+    } else {
+      rateLimitQuery = rateLimitQuery.is("form_id", null);
+    }
+
+    const { data: recentCode } = await rateLimitQuery.single();
 
     if (recentCode) {
       const waitTime = Math.ceil((60000 - (Date.now() - new Date(recentCode.created_at).getTime())) / 1000);
@@ -91,12 +108,20 @@ const handler = async (req: Request): Promise<Response> => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Mark any existing unverified codes as expired by deleting them
-    await supabase
+    let deleteQuery = supabase
       .from("email_verifications")
       .delete()
       .eq("email", email.toLowerCase())
-      .eq("form_id", formId)
+      .eq("purpose", purpose)
       .eq("verified", false);
+    
+    if (purpose === "registration" && formId) {
+      deleteQuery = deleteQuery.eq("form_id", formId);
+    } else {
+      deleteQuery = deleteQuery.is("form_id", null);
+    }
+    
+    await deleteQuery;
 
     // Insert new verification record
     const { error: insertError } = await supabase
@@ -104,7 +129,8 @@ const handler = async (req: Request): Promise<Response> => {
       .insert({
         email: email.toLowerCase(),
         code,
-        form_id: formId,
+        form_id: purpose === "registration" ? formId : null,
+        purpose,
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
       });
 
@@ -148,17 +174,28 @@ const handler = async (req: Request): Promise<Response> => {
       const fromName = "Lekkside Check-in Portal";
       const fromAddress = smtpUser;
       
+      // Customize email content based on purpose
+      const isAuth = purpose === "auth";
+      const emailSubject = isAuth 
+        ? "Your sign-in code for Lekkside Check-in Portal"
+        : `Your verification code for ${eventName || "event registration"}`;
+      
+      const emailHeading = isAuth ? "Sign in to your account" : "Verify your email";
+      const emailContext = isAuth 
+        ? "Lekkside Check-in Portal" 
+        : (eventName || "event registration");
+      
       await client.send({
         from: `${fromName} <${fromAddress}>`,
         to: email,
         replyTo: fromAddress,
-        subject: `Your verification code for ${eventName || "event registration"}`,
+        subject: emailSubject,
         content: `Your verification code is: ${code}\n\nThis code expires in 10 minutes. If you didn't request this code, you can safely ignore this email.`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Verify your email</h1>
+            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">${emailHeading}</h1>
             <p style="color: #666; font-size: 16px; margin-bottom: 24px;">
-              Use the following code to verify your email address for ${eventName || "event registration"}:
+              Use the following code to ${isAuth ? "sign in to" : "verify your email address for"} ${emailContext}:
             </p>
             <div style="background: #f5f5f5; border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 24px;">
               <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${code}</span>
@@ -196,12 +233,20 @@ const handler = async (req: Request): Promise<Response> => {
       }
       
       // Delete the verification record since email failed
-      await supabase
+      let deleteOnErrorQuery = supabase
         .from("email_verifications")
         .delete()
         .eq("email", email.toLowerCase())
-        .eq("form_id", formId)
-        .eq("code", code);
+        .eq("code", code)
+        .eq("purpose", purpose);
+      
+      if (purpose === "registration" && formId) {
+        deleteOnErrorQuery = deleteOnErrorQuery.eq("form_id", formId);
+      } else {
+        deleteOnErrorQuery = deleteOnErrorQuery.is("form_id", null);
+      }
+      
+      await deleteOnErrorQuery;
       
       return new Response(
         JSON.stringify({ error: "Failed to send verification email. Please try again." }),
