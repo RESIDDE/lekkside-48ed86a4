@@ -6,8 +6,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  sendAuthOtp: (email: string) => Promise<{ error: Error | null; debugCode?: string }>;
-  verifyAuthOtp: (email: string, code: string, fullName?: string) => Promise<{ error: Error | null; isNewUser?: boolean }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -36,58 +36,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const sendAuthOtp = async (email: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('send-otp', {
-        body: { email, purpose: 'auth' }
-      });
-
-      if (error) {
-        return { error: new Error(error.message || 'Failed to send verification code') };
-      }
-
-      if (data?.error) {
-        return { error: new Error(data.error) };
-      }
-
-      return { error: null, debugCode: data?.debugCode };
-    } catch (err: any) {
-      return { error: new Error(err.message || 'Failed to send verification code') };
-    }
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error as Error | null };
   };
 
-  const verifyAuthOtp = async (email: string, code: string, fullName?: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('auth-with-otp', {
-        body: { email, code, fullName }
-      });
-
-      if (error) {
-        return { error: new Error(error.message || 'Failed to verify code') };
+  const signUp = async (email: string, password: string, fullName?: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: { full_name: fullName }
       }
-
-      if (data?.error) {
-        return { error: new Error(data.error) };
-      }
-
-      if (data?.token && data?.type) {
-        // Use the token to verify and create session
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: data.token,
-          type: data.type,
-        });
-
-        if (verifyError) {
-          return { error: new Error(verifyError.message) };
-        }
-
-        return { error: null, isNewUser: data.isNewUser };
-      }
-
-      return { error: new Error('Invalid response from server') };
-    } catch (err: any) {
-      return { error: new Error(err.message || 'Failed to verify code') };
-    }
+    });
+    return { error: error as Error | null };
   };
 
   const signOut = async () => {
@@ -95,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, sendAuthOtp, verifyAuthOtp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
