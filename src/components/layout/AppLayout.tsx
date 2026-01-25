@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, LogOut, Menu, X, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Calendar, LogOut, Menu, X, ChevronRight, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useState } from 'react';
@@ -25,6 +25,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/events', label: 'Events', icon: Calendar },
+    { href: '/profile', label: 'Profile', icon: User },
   ];
 
   return (
