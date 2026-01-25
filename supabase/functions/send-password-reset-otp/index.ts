@@ -1,0 +1,240 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface SendPasswordResetRequest {
+  email: string;
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { email }: SendPasswordResetRequest = await req.json();
+
+    console.log(`Sending password reset OTP to ${email}`);
+
+    if (!email) {
+      return new Response(
+        JSON.stringify({ error: "Email is required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email format" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Verify MX records exist for the email domain
+    const domain = email.split("@")[1];
+    console.log(`Checking MX records for domain: ${domain}`);
+    
+    try {
+      const mxRecords = await Deno.resolveDns(domain, "MX");
+      console.log(`MX records found for ${domain}:`, mxRecords);
+      
+      if (!mxRecords || mxRecords.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "This email domain cannot receive emails. Please use a valid email address." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    } catch (dnsError: any) {
+      console.error(`MX lookup failed for ${domain}:`, dnsError.message);
+      return new Response(
+        JSON.stringify({ error: "This email domain does not exist or cannot receive emails. Please check your email address." }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check if user exists with this email
+    const { data: userData, error: userError } = await supabase.auth.admin.listUsers();
+    
+    if (userError) {
+      console.error("Error listing users:", userError);
+      return new Response(
+        JSON.stringify({ error: "An error occurred. Please try again." }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const userExists = userData.users.some(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
+    );
+
+    if (!userExists) {
+      // Don't reveal if user exists - return success anyway for security
+      console.log(`No user found with email ${email}, returning success anyway`);
+      return new Response(
+        JSON.stringify({ success: true, message: "If an account exists with this email, a reset code has been sent." }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Rate limiting: Check if a code was sent in the last 60 seconds
+    const { data: recentCode } = await supabase
+      .from("email_verifications")
+      .select("created_at")
+      .eq("email", email.toLowerCase())
+      .eq("purpose", "password_reset")
+      .gte("created_at", new Date(Date.now() - 60000).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (recentCode) {
+      const waitTime = Math.ceil((60000 - (Date.now() - new Date(recentCode.created_at).getTime())) / 1000);
+      return new Response(
+        JSON.stringify({ error: `Please wait ${waitTime} seconds before requesting a new code` }),
+        { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Mark any existing unverified password reset codes as expired by deleting them
+    await supabase
+      .from("email_verifications")
+      .delete()
+      .eq("email", email.toLowerCase())
+      .eq("purpose", "password_reset")
+      .eq("verified", false);
+
+    // Insert new verification record
+    const { error: insertError } = await supabase
+      .from("email_verifications")
+      .insert({
+        email: email.toLowerCase(),
+        code,
+        purpose: "password_reset",
+        form_id: null,
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
+      });
+
+    if (insertError) {
+      console.error("Failed to insert verification record:", insertError);
+      return new Response(
+        JSON.stringify({ error: "Failed to create reset code" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Get SMTP credentials from environment
+    const smtpHost = Deno.env.get("SMTP_HOST")!;
+    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
+    const smtpUser = Deno.env.get("SMTP_USER")!;
+    const smtpPass = Deno.env.get("SMTP_PASS")!;
+
+    console.log(`Connecting to SMTP server: ${smtpHost}:${smtpPort}`);
+
+    // Generate a unique Message-ID for tracking
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2)}.reset@${smtpHost}>`;
+    
+    // Determine TLS mode based on port
+    const useTLS = smtpPort === 465;
+
+    // Create SMTP client
+    const client = new SMTPClient({
+      connection: {
+        hostname: smtpHost,
+        port: smtpPort,
+        tls: useTLS,
+        auth: {
+          username: smtpUser,
+          password: smtpPass,
+        },
+      },
+    });
+
+    try {
+      const fromName = "Lekkside Check-in Portal";
+      const fromAddress = smtpUser;
+      
+      await client.send({
+        from: `${fromName} <${fromAddress}>`,
+        to: email,
+        replyTo: fromAddress,
+        subject: "Reset your password - Lekkside Check-in Portal",
+        content: `Your password reset code is: ${code}\n\nThis code expires in 10 minutes. If you didn't request this code, please ignore this email and your password will remain unchanged.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #1a1a1a; font-size: 24px; margin-bottom: 16px;">Reset Your Password</h1>
+            <p style="color: #666; font-size: 16px; margin-bottom: 24px;">
+              You requested to reset your password for Lekkside Check-in Portal. Use the code below to proceed:
+            </p>
+            <div style="background: #f5f5f5; border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 24px;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a1a;">${code}</span>
+            </div>
+            <p style="color: #999; font-size: 14px;">
+              This code expires in 10 minutes. If you didn't request this password reset, please ignore this email and your password will remain unchanged.
+            </p>
+          </div>
+        `,
+        headers: {
+          "Message-ID": messageId,
+        },
+      });
+
+      await client.close();
+
+      console.log(`Password reset email sent successfully via SMTP with Message-ID: ${messageId}`);
+
+      // NO DEBUG MODE - OTP is NOT returned in response
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "If an account exists with this email, a reset code has been sent."
+        }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    } catch (smtpError: any) {
+      console.error("SMTP error:", smtpError);
+      
+      try {
+        await client.close();
+      } catch (_) {
+        // Ignore close errors
+      }
+      
+      // Delete the verification record since email failed
+      await supabase
+        .from("email_verifications")
+        .delete()
+        .eq("email", email.toLowerCase())
+        .eq("purpose", "password_reset")
+        .eq("code", code);
+      
+      return new Response(
+        JSON.stringify({ error: "Failed to send reset email. Please try again." }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+  } catch (error: any) {
+    console.error("Error in send-password-reset-otp function:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    );
+  }
+};
+
+serve(handler);

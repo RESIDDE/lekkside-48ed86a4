@@ -57,6 +57,7 @@ export type Database = {
           expires_at: string
           form_id: string | null
           id: string
+          purpose: string
           verified: boolean | null
         }
         Insert: {
@@ -66,6 +67,7 @@ export type Database = {
           expires_at?: string
           form_id?: string | null
           id?: string
+          purpose?: string
           verified?: boolean | null
         }
         Update: {
@@ -75,6 +77,7 @@ export type Database = {
           expires_at?: string
           form_id?: string | null
           id?: string
+          purpose?: string
           verified?: boolean | null
         }
         Relationships: [
