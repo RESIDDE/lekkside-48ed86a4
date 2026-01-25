@@ -145,9 +145,11 @@ const handler = async (req: Request): Promise<Response> => {
     const smtpPass = Deno.env.get("SMTP_PASS")!;
 
     console.log(`Connecting to SMTP server: ${smtpHost}:${smtpPort}`);
+    console.log(`Sending from: ${smtpUser}`);
+    console.log(`Sending to: ${email}`);
 
     // Generate a unique Message-ID for tracking
-    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2)}.reset@${smtpHost}>`;
+    const messageId = `<${Date.now()}.${Math.random().toString(36).substring(2)}.reset@educationfair.com.ng>`;
     
     // Determine TLS mode based on port
     const useTLS = smtpPort === 465;
