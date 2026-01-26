@@ -61,6 +61,7 @@ const PublicForm = () => {
     };
   } | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
 
   // OTP Email verification state
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'verified' | 'error'>('idle');
@@ -185,6 +186,61 @@ const PublicForm = () => {
     setOtpError('');
     if (value.length === 6) {
       verifyOtp(value);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!formData.email.trim() || isResendingEmail) return;
+    
+    setIsResendingEmail(true);
+    
+    try {
+      const { data: emailResponse, error: emailError } = await supabase.functions.invoke('send-confirmation-ticket', {
+        body: {
+          firstName: formData.first_name.trim(),
+          lastName: formData.last_name.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim() || undefined,
+          notes: formData.notes.trim() || undefined,
+          customFields: Object.keys(submittedCustomFields).length > 0 ? submittedCustomFields : undefined,
+          eventName: event?.name,
+          eventDate: event?.date || undefined,
+          eventVenue: event?.venue || undefined,
+          confirmationNumber: confirmationNumber,
+        }
+      });
+      
+      if (emailError) {
+        console.error('Failed to resend confirmation email:', emailError);
+        setEmailDebugInfo({
+          success: false,
+          error: emailError.message || 'Unknown error',
+        });
+        toast.error("Failed to send email. Please try again.");
+      } else if (emailResponse?.success) {
+        setEmailDebugInfo({
+          success: true,
+          messageId: emailResponse.messageId,
+          sentAt: emailResponse.sentAt,
+          debug: emailResponse.debug,
+        });
+        toast.success("Ticket sent to your email!");
+      } else {
+        setEmailDebugInfo({
+          success: false,
+          error: emailResponse?.error || 'Failed to send email',
+        });
+        toast.error(emailResponse?.error || "Failed to send email. Please try again.");
+      }
+    } catch (err: any) {
+      console.error('Failed to resend confirmation email:', err);
+      setEmailDebugInfo({
+        success: false,
+        error: err?.message || 'Unknown error',
+      });
+      toast.error("Failed to send email. Please try again.");
+    } finally {
+      setIsResendingEmail(false);
     }
   };
 
@@ -373,9 +429,30 @@ const PublicForm = () => {
               registeredAt={registeredAt}
             />
             {formData.email && (
-              <p className="text-center text-sm text-muted-foreground">
-                📧 A copy of this ticket has been sent to <strong>{formData.email}</strong>
-              </p>
+              <div className="text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  📧 A copy of this ticket has been sent to <strong>{formData.email}</strong>
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResendEmail}
+                  disabled={isResendingEmail}
+                  className="gap-2"
+                >
+                  {isResendingEmail ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4" />
+                      Resend to Email
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
             
             {/* Email Debug Panel */}
