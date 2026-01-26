@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Calendar, MapPin, Loader2, CheckCircle2, Mail } from "lucide-react";
+import { Calendar, MapPin, Loader2, CheckCircle2, Mail, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import lekkLogo from "@/assets/lekkside-logo.png";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -46,6 +47,20 @@ const PublicForm = () => {
   const [confirmationNumber, setConfirmationNumber] = useState("");
   const [registeredAt, setRegisteredAt] = useState("");
   const [submittedCustomFields, setSubmittedCustomFields] = useState<Record<string, string | boolean>>({});
+  
+  // Email debug info state
+  const [emailDebugInfo, setEmailDebugInfo] = useState<{
+    success: boolean;
+    messageId?: string;
+    sentAt?: string;
+    error?: string;
+    debug?: {
+      smtpHost?: string;
+      recipient?: string;
+      fromAddress?: string;
+    };
+  } | null>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // OTP Email verification state
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'verified' | 'error'>('idle');
@@ -252,7 +267,7 @@ const PublicForm = () => {
       // Send confirmation email if email is provided
       if (formData.email.trim()) {
         try {
-          await supabase.functions.invoke('send-confirmation-ticket', {
+          const { data: emailResponse, error: emailError } = await supabase.functions.invoke('send-confirmation-ticket', {
             body: {
               firstName: formData.first_name.trim(),
               lastName: formData.last_name.trim(),
@@ -266,9 +281,35 @@ const PublicForm = () => {
               confirmationNumber: confNum,
             }
           });
-          toast.success("Registration successful! Ticket sent to your email.");
-        } catch (emailErr) {
+          
+          if (emailError) {
+            console.error('Failed to send confirmation email:', emailError);
+            setEmailDebugInfo({
+              success: false,
+              error: emailError.message || 'Unknown error',
+            });
+            toast.success("Registration successful! (Email delivery may be delayed)");
+          } else if (emailResponse?.success) {
+            setEmailDebugInfo({
+              success: true,
+              messageId: emailResponse.messageId,
+              sentAt: emailResponse.sentAt,
+              debug: emailResponse.debug,
+            });
+            toast.success("Registration successful! Ticket sent to your email.");
+          } else {
+            setEmailDebugInfo({
+              success: false,
+              error: emailResponse?.error || 'Failed to send email',
+            });
+            toast.success("Registration successful! (Email delivery may be delayed)");
+          }
+        } catch (emailErr: any) {
           console.error('Failed to send confirmation email:', emailErr);
+          setEmailDebugInfo({
+            success: false,
+            error: emailErr?.message || 'Unknown error',
+          });
           toast.success("Registration successful! (Email delivery may be delayed)");
         }
       } else {
@@ -335,6 +376,79 @@ const PublicForm = () => {
               <p className="text-center text-sm text-muted-foreground">
                 📧 A copy of this ticket has been sent to <strong>{formData.email}</strong>
               </p>
+            )}
+            
+            {/* Email Debug Panel */}
+            {emailDebugInfo && (
+              <Collapsible open={debugOpen} onOpenChange={setDebugOpen} className="w-full max-w-md mx-auto">
+                <CollapsibleTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className={`w-full flex items-center justify-between gap-2 text-xs ${
+                      emailDebugInfo.success ? 'text-green-600' : 'text-destructive'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {emailDebugInfo.success ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      )}
+                      <span>
+                        Email {emailDebugInfo.success ? 'Sent Successfully' : 'Failed to Send'}
+                      </span>
+                    </div>
+                    {debugOpen ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 p-3 bg-muted/50 rounded-lg text-xs space-y-1.5 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span className={emailDebugInfo.success ? 'text-green-600' : 'text-destructive'}>
+                        {emailDebugInfo.success ? 'Sent' : 'Failed'}
+                      </span>
+                    </div>
+                    {emailDebugInfo.messageId && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Message ID:</span>
+                        <span className="truncate max-w-[180px]" title={emailDebugInfo.messageId}>
+                          {emailDebugInfo.messageId.slice(1, 20)}...
+                        </span>
+                      </div>
+                    )}
+                    {emailDebugInfo.sentAt && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Sent At:</span>
+                        <span>{new Date(emailDebugInfo.sentAt).toLocaleTimeString()}</span>
+                      </div>
+                    )}
+                    {emailDebugInfo.debug?.smtpHost && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">SMTP Host:</span>
+                        <span>{emailDebugInfo.debug.smtpHost}</span>
+                      </div>
+                    )}
+                    {emailDebugInfo.debug?.fromAddress && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">From:</span>
+                        <span className="truncate max-w-[180px]">{emailDebugInfo.debug.fromAddress}</span>
+                      </div>
+                    )}
+                    {emailDebugInfo.error && (
+                      <div className="flex justify-between text-destructive">
+                        <span>Error:</span>
+                        <span className="truncate max-w-[180px]">{emailDebugInfo.error}</span>
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </div>
         </div>

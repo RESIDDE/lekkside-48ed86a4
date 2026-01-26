@@ -288,7 +288,17 @@ Lekkside Check-in Portal
       console.log(`Confirmation ticket email sent successfully to ${email} via SMTP, Message-ID: ${messageId}`);
 
       return new Response(
-        JSON.stringify({ success: true, message: "Confirmation ticket sent", messageId }),
+        JSON.stringify({ 
+          success: true, 
+          message: "Confirmation ticket sent", 
+          messageId,
+          sentAt: new Date().toISOString(),
+          debug: {
+            smtpHost: smtpHost,
+            recipient: email,
+            fromAddress: smtpUser,
+          }
+        }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     } catch (smtpError: any) {
