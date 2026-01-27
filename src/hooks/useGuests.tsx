@@ -182,3 +182,20 @@ export function useDeleteGuest() {
     },
   });
 }
+
+export function useDeleteAllGuests() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      const { error } = await supabase
+        .from('guests')
+        .delete()
+        .eq('event_id', eventId);
+      if (error) throw error;
+    },
+    onSuccess: (_, eventId) => {
+      queryClient.invalidateQueries({ queryKey: ['guests', eventId] });
+    },
+  });
+}
