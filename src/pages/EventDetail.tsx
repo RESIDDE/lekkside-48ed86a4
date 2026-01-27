@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Users, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Users, Trash2, FileX } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { CheckInStationsDialog } from '@/components/share/CheckInStationsDialog'
 import { StationsStatsPanel } from '@/components/share/StationsStatsPanel';
 import { FormsButton } from '@/components/forms/FormsButton';
 import { useEvent, useDeleteEvent } from '@/hooks/useEvents';
-import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn } from '@/hooks/useGuests';
+import { useGuests, useGuestStats, useCheckIn, useUndoCheckIn, useDeleteAllGuests } from '@/hooks/useGuests';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,8 +28,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -44,9 +49,11 @@ export default function EventDetail() {
   const checkIn = useCheckIn();
   const undoCheckIn = useUndoCheckIn();
   const deleteEvent = useDeleteEvent();
+  const deleteAllGuests = useDeleteAllGuests();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [deleteDialogType, setDeleteDialogType] = useState<'data' | 'event' | null>(null);
 
   const filteredGuests = useMemo(() => {
     if (!guests) return [];
@@ -139,6 +146,28 @@ export default function EventDetail() {
         description: 'Failed to delete event. Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setDeleteDialogType(null);
+    }
+  };
+
+  const handleDeleteImportedData = async () => {
+    if (!eventId) return;
+    
+    try {
+      await deleteAllGuests.mutateAsync(eventId);
+      toast({
+        title: 'Data deleted',
+        description: 'All imported guest data has been removed.',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete data. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogType(null);
     }
   };
 
@@ -211,12 +240,53 @@ export default function EventDetail() {
             <ExportButton guests={guests || []} eventName={event.name} />
             <CheckInStationsDialog eventId={event.id} />
             <FormsButton eventId={event.id} />
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="text-destructive hover:text-destructive h-10 w-10 ml-auto">
                   <Trash2 className="w-4 h-4" />
                 </Button>
-              </AlertDialogTrigger>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem 
+                  onClick={() => setDeleteDialogType('data')}
+                  disabled={stats.total === 0}
+                >
+                  <FileX className="w-4 h-4 mr-2" />
+                  Delete imported data
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setDeleteDialogType('event')}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete event
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Delete Imported Data Dialog */}
+            <AlertDialog open={deleteDialogType === 'data'} onOpenChange={(open) => !open && setDeleteDialogType(null)}>
+              <AlertDialogContent className="mx-4 max-w-[calc(100%-2rem)] sm:max-w-lg">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Imported Data</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all {stats.total} guests from this event. The event itself will be kept. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                  <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteImportedData}
+                    className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete Data
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Event Dialog */}
+            <AlertDialog open={deleteDialogType === 'event'} onOpenChange={(open) => !open && setDeleteDialogType(null)}>
               <AlertDialogContent className="mx-4 max-w-[calc(100%-2rem)] sm:max-w-lg">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Event</AlertDialogTitle>
