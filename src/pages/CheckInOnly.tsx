@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, Users, UserCheck, Clock, Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -56,7 +57,7 @@ export default function CheckInOnly() {
     return result;
   }, [guests, searchQuery, activeTab]);
 
-  const handleCheckIn = (guestId: string) => {
+  const handleCheckIn = useCallback((guestId: string) => {
     checkIn.mutate(
       { guestId, userId: null, stationId: stationId || null },
       {
@@ -75,9 +76,9 @@ export default function CheckInOnly() {
         },
       }
     );
-  };
+  }, [checkIn, stationId, toast]);
 
-  const handleUndoCheckIn = (guestId: string) => {
+  const handleUndoCheckIn = useCallback((guestId: string) => {
     undoCheckIn.mutate(guestId, {
       onSuccess: () => {
         toast({
@@ -93,7 +94,16 @@ export default function CheckInOnly() {
         });
       },
     });
-  };
+  }, [undoCheckIn, toast]);
+
+  // Virtual list for performance with large guest lists
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filteredGuests.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 140,
+    overscan: 5,
+  });
 
   if (stationLoading || guestsLoading) {
     return (
@@ -231,31 +241,56 @@ export default function CheckInOnly() {
           </Tabs>
         </div>
 
-        {/* Guest List */}
-        <div className="space-y-3">
-          {filteredGuests.length === 0 ? (
-            <div className="text-center py-12 bg-card rounded-2xl border">
-              <Users className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
-                {searchQuery
-                  ? "No guests found matching your search"
-                  : stats.total === 0
-                  ? "No guests registered for this event"
-                  : "No guests in this category"}
-              </p>
+        {/* Guest List - Virtualized */}
+        {filteredGuests.length === 0 ? (
+          <div className="text-center py-12 bg-card rounded-2xl border">
+            <Users className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">
+              {searchQuery
+                ? "No guests found matching your search"
+                : stats.total === 0
+                ? "No guests registered for this event"
+                : "No guests in this category"}
+            </p>
+          </div>
+        ) : (
+          <div
+            ref={parentRef}
+            className="h-[calc(100vh-480px)] min-h-[300px] overflow-auto"
+          >
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const guest = filteredGuests[virtualRow.index];
+                return (
+                  <div
+                    key={guest.id}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                      padding: '6px 0',
+                    }}
+                  >
+                    <GuestCard
+                      guest={guest}
+                      onCheckIn={handleCheckIn}
+                      onUndoCheckIn={handleUndoCheckIn}
+                      isLoading={checkIn.isPending || undoCheckIn.isPending}
+                    />
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            filteredGuests.map((guest) => (
-              <GuestCard
-                key={guest.id}
-                guest={guest}
-                onCheckIn={handleCheckIn}
-                onUndoCheckIn={handleUndoCheckIn}
-                isLoading={checkIn.isPending || undoCheckIn.isPending}
-              />
-            ))
-          )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );

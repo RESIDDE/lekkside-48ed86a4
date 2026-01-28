@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
@@ -70,22 +70,24 @@ export function useGuests(eventId: string | undefined) {
 export function useGuestStats(eventId: string | undefined) {
   const { data: guests } = useGuests(eventId);
   
-  const total = guests?.length ?? 0;
-  const checkedIn = guests?.filter(g => g.checked_in).length ?? 0;
-  const pending = total - checkedIn;
-  const percentage = total > 0 ? Math.round((checkedIn / total) * 100) : 0;
-  
-  const ticketTypes = guests?.reduce((acc, guest) => {
-    const type = guest.ticket_type || 'General';
-    if (!acc[type]) {
-      acc[type] = { total: 0, checkedIn: 0 };
-    }
-    acc[type].total++;
-    if (guest.checked_in) acc[type].checkedIn++;
-    return acc;
-  }, {} as Record<string, { total: number; checkedIn: number }>);
+  return useMemo(() => {
+    const total = guests?.length ?? 0;
+    const checkedIn = guests?.filter(g => g.checked_in).length ?? 0;
+    const pending = total - checkedIn;
+    const percentage = total > 0 ? Math.round((checkedIn / total) * 100) : 0;
+    
+    const ticketTypes = guests?.reduce((acc, guest) => {
+      const type = guest.ticket_type || 'General';
+      if (!acc[type]) {
+        acc[type] = { total: 0, checkedIn: 0 };
+      }
+      acc[type].total++;
+      if (guest.checked_in) acc[type].checkedIn++;
+      return acc;
+    }, {} as Record<string, { total: number; checkedIn: number }>);
 
-  return { total, checkedIn, pending, percentage, ticketTypes };
+    return { total, checkedIn, pending, percentage, ticketTypes };
+  }, [guests]);
 }
 
 export function useCheckIn() {

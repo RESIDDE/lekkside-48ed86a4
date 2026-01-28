@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Check, Undo2, User, Mail, Phone, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +15,7 @@ interface GuestCardProps {
   isLoading?: boolean;
 }
 
-export function GuestCard({ guest, onCheckIn, onUndoCheckIn, isLoading }: GuestCardProps) {
+export const GuestCard = memo(function GuestCard({ guest, onCheckIn, onUndoCheckIn, isLoading }: GuestCardProps) {
   const fullName = [guest.first_name, guest.last_name].filter(Boolean).join(' ') || 'Guest';
 
   return (
@@ -164,4 +165,4 @@ export function GuestCard({ guest, onCheckIn, onUndoCheckIn, isLoading }: GuestC
       </div>
     </div>
   );
-}
+});
