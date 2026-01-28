@@ -71,9 +71,13 @@ export default function EventDetail() {
     
     // Filter by search
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(guest => {
+        // Combine first and last name for full name search
+        const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
+        
         const searchableFields = [
+          fullName,  // Add combined full name first
           guest.first_name,
           guest.last_name,
           guest.email,

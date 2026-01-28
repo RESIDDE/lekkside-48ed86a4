@@ -36,15 +36,20 @@ export default function CheckInOnly() {
 
     // Filter by search query
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (guest) =>
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((guest) => {
+        // Combine first and last name for full name search
+        const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
+        
+        return (
+          fullName.includes(query) ||
           guest.first_name?.toLowerCase().includes(query) ||
           guest.last_name?.toLowerCase().includes(query) ||
           guest.email?.toLowerCase().includes(query) ||
           guest.phone?.includes(query) ||
           guest.ticket_number?.toLowerCase().includes(query)
-      );
+        );
+      });
     }
 
     // Filter by tab
