@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import Fuse from 'fuse.js';
 import { ArrowLeft, Calendar, MapPin, Users, Trash2, FileX } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -57,50 +58,82 @@ export default function EventDetail() {
   const [deleteDialogType, setDeleteDialogType] = useState<'data' | 'event' | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const filteredGuests = useMemo(() => {
+  // Prepare guests with full name for fuzzy search
+  const guestsWithFullName = useMemo(() => {
     if (!guests) return [];
+    return guests.map(guest => {
+      // Collect custom field values for search
+      const customFieldValues = guest.custom_fields 
+        ? Object.values(guest.custom_fields as Record<string, string>).join(' ')
+        : '';
+      
+      return {
+        ...guest,
+        fullName: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
+        reverseName: `${guest.last_name || ''} ${guest.first_name || ''}`.trim(),
+        searchableCustomFields: customFieldValues,
+      };
+    });
+  }, [guests]);
+
+  // Create Fuse instance for fuzzy search
+  const fuse = useMemo(() => {
+    return new Fuse(guestsWithFullName, {
+      keys: [
+        { name: 'fullName', weight: 2 },
+        { name: 'reverseName', weight: 2 },
+        { name: 'first_name', weight: 1.5 },
+        { name: 'last_name', weight: 1.5 },
+        { name: 'email', weight: 1 },
+        { name: 'phone', weight: 1 },
+        { name: 'ticket_number', weight: 1 },
+        { name: 'ticket_type', weight: 0.8 },
+        { name: 'notes', weight: 0.5 },
+        { name: 'searchableCustomFields', weight: 0.8 },
+      ],
+      threshold: 0.4, // 0 = exact match, 1 = match anything
+      distance: 100,
+      includeScore: true,
+      minMatchCharLength: 2,
+    });
+  }, [guestsWithFullName]);
+
+  const filteredGuests = useMemo(() => {
+    let filtered = guestsWithFullName;
     
-    let filtered = guests;
-    
-    // Filter by tab
+    // Filter by tab first
     if (activeTab === 'pending') {
       filtered = filtered.filter(g => !g.checked_in);
     } else if (activeTab === 'checked-in') {
       filtered = filtered.filter(g => g.checked_in);
     }
     
-    // Filter by search
+    // Then apply fuzzy search
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(guest => {
-        // Combine first and last name for full name search
-        const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
-        
-        const searchableFields = [
-          fullName,  // Add combined full name first
-          guest.first_name,
-          guest.last_name,
-          guest.email,
-          guest.phone,
-          guest.ticket_number,
-          guest.ticket_type,
-          guest.notes,
-        ];
-        
-        // Also search custom fields
-        if (guest.custom_fields) {
-          const customFieldValues = Object.values(guest.custom_fields as Record<string, string>);
-          searchableFields.push(...customFieldValues);
-        }
-        
-        return searchableFields.some(field => 
-          field?.toLowerCase().includes(query)
-        );
+      const tabFilteredFuse = new Fuse(filtered, {
+        keys: [
+          { name: 'fullName', weight: 2 },
+          { name: 'reverseName', weight: 2 },
+          { name: 'first_name', weight: 1.5 },
+          { name: 'last_name', weight: 1.5 },
+          { name: 'email', weight: 1 },
+          { name: 'phone', weight: 1 },
+          { name: 'ticket_number', weight: 1 },
+          { name: 'ticket_type', weight: 0.8 },
+          { name: 'notes', weight: 0.5 },
+          { name: 'searchableCustomFields', weight: 0.8 },
+        ],
+        threshold: 0.4,
+        distance: 100,
+        includeScore: true,
+        minMatchCharLength: 2,
       });
+      const searchResults = tabFilteredFuse.search(searchQuery.trim());
+      filtered = searchResults.map(r => r.item);
     }
     
     return filtered;
-  }, [guests, searchQuery, activeTab]);
+  }, [guestsWithFullName, searchQuery, activeTab]);
 
   const handleCheckIn = useCallback(async (guestId: string) => {
     if (!user) return;

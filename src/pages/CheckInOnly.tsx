@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import Fuse from "fuse.js";
 import { Search, Users, UserCheck, Clock, Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -31,25 +32,41 @@ export default function CheckInOnly() {
   const checkIn = useCheckIn();
   const undoCheckIn = useUndoCheckIn();
 
-  const filteredGuests = useMemo(() => {
-    let result = guests;
+  // Prepare guests with full name for fuzzy search
+  const guestsWithFullName = useMemo(() => {
+    return guests.map(guest => ({
+      ...guest,
+      fullName: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
+      reverseName: `${guest.last_name || ''} ${guest.first_name || ''}`.trim(),
+    }));
+  }, [guests]);
 
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter((guest) => {
-        // Combine first and last name for full name search
-        const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
-        
-        return (
-          fullName.includes(query) ||
-          guest.first_name?.toLowerCase().includes(query) ||
-          guest.last_name?.toLowerCase().includes(query) ||
-          guest.email?.toLowerCase().includes(query) ||
-          guest.phone?.includes(query) ||
-          guest.ticket_number?.toLowerCase().includes(query)
-        );
-      });
+  // Create Fuse instance for fuzzy search
+  const fuse = useMemo(() => {
+    return new Fuse(guestsWithFullName, {
+      keys: [
+        { name: 'fullName', weight: 2 },
+        { name: 'reverseName', weight: 2 },
+        { name: 'first_name', weight: 1.5 },
+        { name: 'last_name', weight: 1.5 },
+        { name: 'email', weight: 1 },
+        { name: 'phone', weight: 1 },
+        { name: 'ticket_number', weight: 1 },
+      ],
+      threshold: 0.4, // 0 = exact match, 1 = match anything
+      distance: 100,
+      includeScore: true,
+      minMatchCharLength: 2,
+    });
+  }, [guestsWithFullName]);
+
+  const filteredGuests = useMemo(() => {
+    let result = guestsWithFullName;
+
+    // Filter by search query using fuzzy search
+    if (searchQuery.trim()) {
+      const searchResults = fuse.search(searchQuery.trim());
+      result = searchResults.map(r => r.item);
     }
 
     // Filter by tab
@@ -60,7 +77,7 @@ export default function CheckInOnly() {
     }
 
     return result;
-  }, [guests, searchQuery, activeTab]);
+  }, [guestsWithFullName, searchQuery, activeTab, fuse]);
 
   const handleCheckIn = useCallback((guestId: string) => {
     checkIn.mutate(
