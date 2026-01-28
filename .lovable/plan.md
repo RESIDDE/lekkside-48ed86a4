@@ -1,192 +1,119 @@
 
+# Fix Full Name Search Not Finding Guests
 
-# Performance Optimization Plan: Make the Platform Lightning Fast
+## Problem Identified
+When users search for a guest using their full name (e.g., "Gift Abah"), the search returns "not found" even though the guest exists. This happens because:
 
-## Overview
-This plan addresses performance bottlenecks across the application to ensure fast initial load times, responsive interactions, and smooth user experience even with large guest lists (up to 10,000 guests).
+1. The search checks each field **separately** - it looks for "Gift Abah" inside `first_name` ("Gift") and `last_name` ("Abah") individually
+2. Since "Gift Abah" doesn't match "Gift" or "Abah" alone, no results are returned
+3. The user would need to search for just "Gift" or just "Abah" to find the guest
 
----
+## Solution
+Modify the search logic to also match against the **combined full name** (`first_name + " " + last_name`), allowing users to search naturally using full names.
 
-## Key Performance Issues Identified
+## Implementation
 
-| Issue | Impact | Location |
-|-------|--------|----------|
-| No code splitting | Large initial bundle loads everything upfront | `App.tsx` |
-| All pages loaded eagerly | Slow first contentful paint | All route imports |
-| No React Query caching optimization | Redundant API calls | `useEvents.tsx`, `useGuests.tsx` |
-| GuestCard not memoized | Re-renders entire list on any change | `GuestCard.tsx` |
-| No list virtualization | Poor performance with 10,000 guests | `EventDetail.tsx`, `CheckInOnly.tsx` |
-| EventCard fetches stats for each card | N+1 query pattern on Dashboard | `EventCard.tsx` |
-| No skeleton/placeholder optimization | Perceived slowness during load | Various pages |
+### Files to Modify
 
----
+| File | Change |
+|------|--------|
+| `src/pages/CheckInOnly.tsx` | Add full name combination to search filter |
+| `src/pages/EventDetail.tsx` | Add full name combination to search filter |
 
-## Implementation Steps
+### Code Changes
 
-### Step 1: Add Code Splitting with React.lazy
+#### CheckInOnly.tsx (lines 38-47)
 
-Convert page imports in `App.tsx` to use lazy loading so only the current route loads initially:
-
+**Before:**
 ```typescript
-// Before: Eager loading
-import Dashboard from "./pages/Dashboard";
-
-// After: Lazy loading with Suspense
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-```
-
-All routes except `Index` (which is tiny) will be lazy-loaded:
-- `Auth`, `Dashboard`, `Events`, `EventDetail`, `CheckInOnly`, `PublicForm`, `Profile`, `NotFound`
-
-Add a `Suspense` boundary with a lightweight loading spinner.
-
-### Step 2: Optimize React Query Configuration
-
-Update the QueryClient configuration in `App.tsx` for better caching:
-
-```typescript
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes - reduce refetches
-      gcTime: 1000 * 60 * 30,   // 30 minutes cache
-      refetchOnWindowFocus: false, // Don't refetch on tab focus
-      retry: 1, // Reduce retry attempts
-    },
-  },
-});
-```
-
-### Step 3: Memoize GuestCard Component
-
-Wrap `GuestCard` with `React.memo` to prevent unnecessary re-renders when other guests in the list change:
-
-```typescript
-export const GuestCard = memo(function GuestCard({ 
-  guest, 
-  onCheckIn, 
-  onUndoCheckIn, 
-  isLoading 
-}: GuestCardProps) {
-  // ... existing implementation
-});
-```
-
-### Step 4: Add List Virtualization for Large Guest Lists
-
-Install `@tanstack/react-virtual` and implement virtual scrolling for guest lists in `EventDetail.tsx` and `CheckInOnly.tsx`:
-
-- Only render visible guests (typically 10-20 at a time)
-- Dramatically improves performance with 10,000+ guests
-- Maintains smooth scrolling experience
-
-### Step 5: Fix N+1 Query in EventCard
-
-Currently, each `EventCard` on the Dashboard calls `useGuestStats(event.id)` which triggers separate queries. Optimize by:
-
-1. Create a batch query hook `useEventsWithStats()` that joins events with guest counts in a single query
-2. Or preload stats for visible events using React Query's `prefetchQuery`
-
-### Step 6: Optimize Auth State Initialization
-
-The current auth flow makes two sequential calls. Optimize in `useAuth.tsx`:
-
-```typescript
-useEffect(() => {
-  // Get initial session first
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setSession(session);
-    setUser(session?.user ?? null);
-    setLoading(false);
-  });
-
-  // Then subscribe for future changes (non-blocking)
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-    }
+if (searchQuery) {
+  const query = searchQuery.toLowerCase();
+  result = result.filter(
+    (guest) =>
+      guest.first_name?.toLowerCase().includes(query) ||
+      guest.last_name?.toLowerCase().includes(query) ||
+      guest.email?.toLowerCase().includes(query) ||
+      guest.phone?.includes(query) ||
+      guest.ticket_number?.toLowerCase().includes(query)
   );
-
-  return () => subscription.unsubscribe();
-}, []);
+}
 ```
 
-### Step 7: Add Search Debouncing
-
-Add debounced search in `GuestSearch.tsx` to prevent filtering on every keystroke:
-
+**After:**
 ```typescript
-const [debouncedValue, setDebouncedValue] = useState(value);
-
-useEffect(() => {
-  const timer = setTimeout(() => onChange(debouncedValue), 200);
-  return () => clearTimeout(timer);
-}, [debouncedValue]);
+if (searchQuery) {
+  const query = searchQuery.toLowerCase().trim();
+  result = result.filter((guest) => {
+    // Combine first and last name for full name search
+    const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
+    
+    return (
+      fullName.includes(query) ||
+      guest.first_name?.toLowerCase().includes(query) ||
+      guest.last_name?.toLowerCase().includes(query) ||
+      guest.email?.toLowerCase().includes(query) ||
+      guest.phone?.includes(query) ||
+      guest.ticket_number?.toLowerCase().includes(query)
+    );
+  });
+}
 ```
 
-### Step 8: Memoize Callback Functions
+#### EventDetail.tsx (lines 72-96)
 
-In `EventDetail.tsx` and `CheckInOnly.tsx`, wrap handlers with `useCallback`:
+Similar change to include full name matching:
 
+**After:**
 ```typescript
-const handleCheckIn = useCallback(async (guestId: string) => {
-  // ... existing logic
-}, [user, checkIn, toast]);
-
-const handleUndoCheckIn = useCallback(async (guestId: string) => {
-  // ... existing logic  
-}, [undoCheckIn, toast]);
+if (searchQuery.trim()) {
+  const query = searchQuery.toLowerCase().trim();
+  filtered = filtered.filter(guest => {
+    // Combine first and last name for full name search
+    const fullName = `${guest.first_name || ''} ${guest.last_name || ''}`.toLowerCase();
+    
+    const searchableFields = [
+      fullName,  // Add combined full name
+      guest.first_name,
+      guest.last_name,
+      guest.email,
+      guest.phone,
+      guest.ticket_number,
+      guest.ticket_type,
+      guest.notes,
+    ];
+    
+    // Also search custom fields
+    if (guest.custom_fields) {
+      const customFieldValues = Object.values(guest.custom_fields as Record<string, string>);
+      searchableFields.push(...customFieldValues);
+    }
+    
+    return searchableFields.some(field => 
+      field?.toLowerCase().includes(query)
+    );
+  });
+}
 ```
 
-### Step 9: Optimize Guest Stats Calculation
+## How It Fixes The Issue
 
-Memoize the stats calculation in `useGuestStats` to prevent recalculation on every render:
+| Search Query | Before | After |
+|--------------|--------|-------|
+| "Gift" | Matches | Matches |
+| "Abah" | Matches | Matches |
+| "Gift Abah" | No results | Matches |
+| "gift abah" | No results | Matches |
+| "Abah Gift" | No results | No results (correct - order matters) |
 
-```typescript
-return useMemo(() => ({
-  total,
-  checkedIn,
-  pending,
-  percentage,
-  ticketTypes,
-}), [guests]);
-```
+## Additional Improvements Included
 
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/App.tsx` | Add lazy loading, Suspense, optimize QueryClient |
-| `src/hooks/useAuth.tsx` | Optimize auth initialization order |
-| `src/hooks/useGuests.tsx` | Memoize stats calculation |
-| `src/components/checkin/GuestCard.tsx` | Wrap with React.memo |
-| `src/components/checkin/GuestSearch.tsx` | Add debounced input |
-| `src/pages/EventDetail.tsx` | Add useCallback, virtual list |
-| `src/pages/CheckInOnly.tsx` | Add useCallback, virtual list |
-| `package.json` | Add `@tanstack/react-virtual` dependency |
-
----
-
-## Expected Performance Improvements
-
-| Metric | Before | After |
-|--------|--------|-------|
-| Initial Bundle Size | ~500KB (all pages) | ~150KB (only needed page) |
-| Time to Interactive | ~3-4s | ~1-2s |
-| Guest List Render (10K) | Freezes browser | Smooth 60fps scrolling |
-| Search Response | Laggy on large lists | Instant with debounce |
-| Dashboard Load | Multiple API calls | Optimized batch fetch |
-
----
+1. **Trim whitespace** - `query.trim()` prevents accidental spaces from breaking searches
+2. **Handle null names** - Using `guest.first_name || ''` prevents errors when names are null
+3. **Consistent logic** - Both pages will use the same improved search behavior
 
 ## Technical Notes
 
-- React.lazy with Suspense is the standard React 18 approach for code splitting
-- TanStack Virtual (formerly react-virtual) is the most efficient virtualization library
-- The 200ms debounce for search is the sweet spot between responsiveness and performance
-- React.memo on GuestCard prevents re-renders when sibling guests change (critical for lists)
-- Query caching with 5-minute staleTime prevents unnecessary refetches while keeping data reasonably fresh
-
+- The full name is constructed as `first_name + space + last_name` to match how users naturally type names
+- The check `fullName.includes(query)` is placed first in the OR chain for clarity but order doesn't affect performance
+- This is a client-side filter so there's no additional database load
+- Works with partial matches (e.g., "Gift A" will still find "Gift Abah")
