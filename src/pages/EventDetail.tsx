@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowLeft, Calendar, MapPin, Users, Trash2, FileX } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -54,6 +55,7 @@ export default function EventDetail() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [deleteDialogType, setDeleteDialogType] = useState<'data' | 'event' | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   const filteredGuests = useMemo(() => {
     if (!guests) return [];
@@ -96,7 +98,7 @@ export default function EventDetail() {
     return filtered;
   }, [guests, searchQuery, activeTab]);
 
-  const handleCheckIn = async (guestId: string) => {
+  const handleCheckIn = useCallback(async (guestId: string) => {
     if (!user) return;
     
     try {
@@ -112,9 +114,9 @@ export default function EventDetail() {
         variant: 'destructive',
       });
     }
-  };
+  }, [user, checkIn, toast]);
 
-  const handleUndoCheckIn = async (guestId: string) => {
+  const handleUndoCheckIn = useCallback(async (guestId: string) => {
     try {
       await undoCheckIn.mutateAsync(guestId);
       toast({
@@ -128,7 +130,7 @@ export default function EventDetail() {
         variant: 'destructive',
       });
     }
-  };
+  }, [undoCheckIn, toast]);
 
   const handleDeleteEvent = async () => {
     if (!eventId) return;
@@ -388,7 +390,7 @@ export default function EventDetail() {
                 </div>
               ) : filteredGuests.length > 0 ? (
                 <div className="space-y-3">
-                  {filteredGuests.map((guest) => (
+                  {filteredGuests.slice(0, 50).map((guest) => (
                     <GuestCard
                       key={guest.id}
                       guest={guest}
@@ -397,6 +399,11 @@ export default function EventDetail() {
                       isLoading={checkIn.isPending || undoCheckIn.isPending}
                     />
                   ))}
+                  {filteredGuests.length > 50 && (
+                    <div className="text-center py-4 text-sm text-muted-foreground">
+                      Showing 50 of {filteredGuests.length} guests. Use search to find specific guests.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-12 sm:py-16 bg-muted/30 rounded-2xl border-2 border-dashed border-border">
