@@ -17,6 +17,7 @@ const CheckInOnly = lazy(() => import("./pages/CheckInOnly"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 const Profile = lazy(() => import("./pages/Profile"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Backup = lazy(() => import("./pages/Backup"));
 
 // Optimized query client with caching
 const queryClient = new QueryClient({
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="/checkin/:stationId" element={<CheckInOnly />} />
               <Route path="/form/:formId" element={<PublicForm />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/backup" element={<Backup />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
