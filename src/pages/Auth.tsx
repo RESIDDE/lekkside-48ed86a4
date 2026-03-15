@@ -412,106 +412,20 @@ export default function Auth() {
         </div>
 
         <Card className="border-2 shadow-lg">
-          <Tabs defaultValue="signin">
-            <CardHeader className="pb-4">
-              <TabsList className="grid w-full grid-cols-2 h-12">
-                <TabsTrigger value="signin" className="text-base">Sign In</TabsTrigger>
-                <TabsTrigger value="signup" className="text-base">Sign Up</TabsTrigger>
-              </TabsList>
-            </CardHeader>
-            
-            <CardContent className="pt-0">
-              <TabsContent value="signin" className="mt-0">
-                <CardDescription className="mb-5 text-center">
-                  Sign in to manage events and check-ins
-                </CardDescription>
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
-                    <Input
-                      id="signin-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className="h-12 text-base"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-password">Password</Label>
-                    <Input
-                      id="signin-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="h-12 text-base"
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
-                    {isLoading ? 'Signing in...' : 'Sign In'}
-                  </Button>
-                  <Button 
-                    type="button"
-                    variant="link" 
-                    className="w-full text-sm"
-                    onClick={() => setShowForgotPassword(true)}
-                  >
-                    Forgot Password?
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="signup" className="mt-0">
-                <CardDescription className="mb-5 text-center">
-                  Create an account to start managing events
-                </CardDescription>
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="John Doe"
-                      className="h-12 text-base"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className="h-12 text-base"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="h-12 text-base"
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
-                    {isLoading ? 'Creating account...' : 'Create Account'}
-                  </Button>
-                </form>
-              </TabsContent>
-            </CardContent>
-          </Tabs>
+          <CardHeader className="pb-4 text-center">
+            <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+              <Lock className="h-6 w-6 text-destructive" />
+            </div>
+            <h2 className="text-lg font-semibold text-foreground">Server Maintenance</h2>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <CardDescription className="text-base">
+              Our servers are currently down for scheduled maintenance. We're working to get things back up as soon as possible.
+            </CardDescription>
+            <p className="text-sm text-muted-foreground">
+              Please check back later. We apologize for the inconvenience.
+            </p>
+          </CardContent>
         </Card>
       </div>
     </div>
